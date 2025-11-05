@@ -1,35 +1,37 @@
 # TSMC Stock Price Scraper
 
-A simple Python web scraper to fetch the current stock price of TSMC (Taiwan Semiconductor Manufacturing Company) using Finnhub's free API.
+A Python web scraper to fetch real-time stock prices for TSMC (Taiwan Semiconductor Manufacturing Company) and other stocks by scraping Yahoo Finance using Playwright.
 
 ## Features
 
-- Fetches real-time TSMC stock price
-- Displays price change and percentage change
-- Shows open, high, low prices
-- Supports any US stock ticker symbol
-- Free to use with Finnhub API key
+- Fetches real-time stock prices from Yahoo Finance
+- No API key required!
+- Displays comprehensive stock data:
+  - Current price
+  - Price change and percentage change
+  - Open, high, low prices
+  - Trading volume
+  - Previous close
+- Supports any stock ticker symbol on Yahoo Finance
+- Includes demo mode with sample data
 
 ## Installation
 
-1. Install Python 3.6 or higher
+1. Install Python 3.8 or higher
 
 2. Install required dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Get a free API key:
-   - Sign up at [https://finnhub.io/](https://finnhub.io/)
-   - Get your free API key from the dashboard
-   - Set it as an environment variable:
-     ```bash
-     export FINNHUB_API_KEY="your_api_key_here"
-     ```
+3. Install Playwright browsers:
+```bash
+playwright install chromium
+```
 
 ## Usage
 
-### Get TSMC stock price from NYSE (default):
+### Get TSMC stock price (default):
 ```bash
 python tsmc_scraper.py
 ```
@@ -38,17 +40,12 @@ python tsmc_scraper.py
 ```bash
 python tsmc_scraper.py AAPL
 python tsmc_scraper.py NVDA
-python tsmc_scraper.py TSM
+python tsmc_scraper.py GOOGL
+python tsmc_scraper.py 2330.TW  # TSMC on Taiwan Stock Exchange
 ```
 
-### Specify API key via command line:
+### Demo mode with sample data (instant, no internet needed):
 ```bash
-python tsmc_scraper.py TSM --api-key=your_api_key_here
-```
-
-### Demo mode with sample data (no API key needed):
-```bash
-# Run with sample data to see how it works
 python tsmc_scraper.py --demo
 python tsmc_scraper.py AAPL --demo
 python tsmc_scraper.py NVDA --demo
@@ -77,16 +74,25 @@ Fetching TSMC stock price for ticker: TSM...
 
 ## Requirements
 
-- Python 3.6+
-- requests
+- Python 3.8+
+- playwright
+
+## How It Works
+
+This scraper uses Playwright to:
+1. Launch a headless Chromium browser
+2. Navigate to Yahoo Finance's quote page for the specified ticker
+3. Extract stock data from the page
+4. Parse and format the information
 
 ## Notes
 
-- Data is sourced from Finnhub API
-- Free API tier includes real-time US stock data
-- Volume data not included in free tier
+- Data is sourced from Yahoo Finance
+- No API key or registration required
+- Scrapes real-time data directly from the website
 - This scraper is for educational purposes only
-- API rate limits apply (see Finnhub documentation)
+- Please respect Yahoo Finance's terms of service
+- The scraper may take a few seconds to run as it loads the page
 
 ## License
 

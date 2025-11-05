@@ -2,115 +2,121 @@
 """
 TSMC Stock Price Scraper
 Fetches the current stock price for TSMC (Taiwan Semiconductor Manufacturing Company)
-using Finnhub's free API.
+by scraping Yahoo Finance using Playwright.
 
-To use this scraper, you need to:
-1. Sign up for a free API key at https://finnhub.io/
-2. Set your API key as an environment variable: export FINNHUB_API_KEY="your_key_here"
-   Or pass it as a command-line argument
+No API key required!
 """
 
-import requests
-import json
+from playwright.sync_api import sync_playwright
 from datetime import datetime
 import sys
-import os
+import re
 
 
-def get_tsmc_stock_price(ticker="TSM", api_key=None):
+def get_tsmc_stock_price(ticker="TSM"):
     """
-    Get TSMC stock price from Finnhub API.
+    Scrape TSMC stock price from Yahoo Finance using Playwright.
 
     Args:
         ticker (str): Stock ticker symbol. Default is "TSM" (NYSE).
-        api_key (str): Finnhub API key. If not provided, will try to get from environment.
+                     Can also use "2330.TW" for Taiwan Stock Exchange.
 
     Returns:
         dict: Dictionary containing stock information
     """
-    # Get API key from parameter, environment variable, or use demo key
-    if not api_key:
-        api_key = os.environ.get('FINNHUB_API_KEY', 'demo')
-
-    if api_key == 'demo':
-        print("  NOTE: Using demo API key. Sign up at https://finnhub.io/ for a free key.")
-        print("  Set it with: export FINNHUB_API_KEY='your_key'\n")
-
     try:
-        # Get quote data
-        quote_url = "https://finnhub.io/api/v1/quote"
-        params = {
-            'symbol': ticker,
-            'token': api_key
-        }
+        with sync_playwright() as p:
+            # Launch browser in headless mode
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        response = requests.get(quote_url, params=params, timeout=10)
-        response.raise_for_status()
-        quote_data = response.json()
+            # Navigate to Yahoo Finance
+            url = f"https://finance.yahoo.com/quote/{ticker}"
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
-        # Check if we got valid data
-        if 'c' not in quote_data or quote_data['c'] == 0:
-            raise ValueError("No price data available. Check your API key or ticker symbol.")
+            # Wait for the price element to be visible
+            page.wait_for_selector('[data-field="regularMarketPrice"]', timeout=10000)
 
-        current_price = quote_data['c']  # Current price
-        previous_close = quote_data['pc']  # Previous close
-        open_price = quote_data['o']  # Open price
-        high_price = quote_data['h']  # High price
-        low_price = quote_data['l']  # Low price
-        change = quote_data['d']  # Change
-        change_percent = quote_data['dp']  # Percent change
+            # Extract company name
+            try:
+                company_name = page.locator('h1').first.inner_text()
+                # Clean up the name (remove ticker in parentheses)
+                company_name = re.sub(r'\s*\([^)]*\)\s*$', '', company_name)
+            except:
+                company_name = ticker
 
-        # Get company profile for additional info
-        try:
-            profile_url = "https://finnhub.io/api/v1/stock/profile2"
-            profile_params = {
-                'symbol': ticker,
-                'token': api_key
+            # Extract current price
+            price_element = page.locator('[data-field="regularMarketPrice"]').first
+            current_price = float(price_element.get_attribute('value'))
+
+            # Extract change and change percent
+            try:
+                change_element = page.locator('[data-field="regularMarketChange"]').first
+                change = float(change_element.get_attribute('value'))
+            except:
+                change = 0.0
+
+            try:
+                change_percent_element = page.locator('[data-field="regularMarketChangePercent"]').first
+                change_percent = float(change_percent_element.get_attribute('value'))
+            except:
+                change_percent = 0.0
+
+            # Extract additional data from the summary table
+            try:
+                # Previous Close
+                prev_close_text = page.locator('text=Previous Close').locator('..').locator('td').nth(1).inner_text()
+                previous_close = float(prev_close_text.replace(',', ''))
+            except:
+                previous_close = current_price - change
+
+            try:
+                # Open
+                open_text = page.locator('text=Open').locator('..').locator('td').nth(1).inner_text()
+                open_price = float(open_text.replace(',', ''))
+            except:
+                open_price = None
+
+            try:
+                # Day's Range (contains high and low)
+                range_text = page.locator('text="Day\'s Range"').locator('..').locator('td').nth(1).inner_text()
+                low_str, high_str = range_text.split(' - ')
+                low_price = float(low_str.replace(',', ''))
+                high_price = float(high_str.replace(',', ''))
+            except:
+                low_price = None
+                high_price = None
+
+            try:
+                # Volume
+                volume_text = page.locator('text=Volume').locator('..').locator('td').nth(1).inner_text()
+                volume = volume_text
+            except:
+                volume = "N/A"
+
+            browser.close()
+
+            return {
+                'ticker': ticker,
+                'company_name': company_name,
+                'price': f"{current_price:.2f}",
+                'change': f"{change:+.2f}",
+                'change_percent': f"{change_percent:+.2f}%",
+                'open': f"{open_price:.2f}" if open_price else "N/A",
+                'high': f"{high_price:.2f}" if high_price else "N/A",
+                'low': f"{low_price:.2f}" if low_price else "N/A",
+                'volume': volume,
+                'previous_close': f"{previous_close:.2f}",
+                'currency': "USD",
+                'exchange': "Yahoo Finance",
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'success': True
             }
-            profile_response = requests.get(profile_url, params=profile_params, timeout=10)
-            profile_data = profile_response.json()
 
-            company_name = profile_data.get('name', 'TSMC')
-            exchange = profile_data.get('exchange', 'N/A')
-            currency = profile_data.get('currency', 'USD')
-        except:
-            company_name = 'TSMC'
-            exchange = 'N/A'
-            currency = 'USD'
-
-        return {
-            'ticker': ticker,
-            'company_name': company_name,
-            'price': f"{current_price:.2f}",
-            'change': f"{change:+.2f}",
-            'change_percent': f"{change_percent:+.2f}%",
-            'open': f"{open_price:.2f}",
-            'high': f"{high_price:.2f}",
-            'low': f"{low_price:.2f}",
-            'volume': "N/A",  # Finnhub free tier doesn't include volume in quote
-            'previous_close': f"{previous_close:.2f}",
-            'currency': currency,
-            'exchange': exchange,
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'success': True
-        }
-
-    except requests.RequestException as e:
-        return {
-            'ticker': ticker,
-            'error': f"Request failed: {str(e)}",
-            'success': False
-        }
-    except (KeyError, ValueError, json.JSONDecodeError) as e:
-        return {
-            'ticker': ticker,
-            'error': f"Error parsing data: {str(e)}",
-            'success': False
-        }
     except Exception as e:
         return {
             'ticker': ticker,
-            'error': f"Unexpected error: {str(e)}",
+            'error': f"Error scraping data: {str(e)}",
             'success': False
         }
 
@@ -179,24 +185,22 @@ def main():
     """Main function to run the scraper."""
     # Parse command line arguments
     ticker = "TSM"
-    api_key = None
     demo_mode = False
 
-    for i, arg in enumerate(sys.argv[1:], 1):
+    for arg in sys.argv[1:]:
         if arg == '--demo':
             demo_mode = True
-        elif arg.startswith('--api-key='):
-            api_key = arg.split('=')[1]
         elif not arg.startswith('--'):
             ticker = arg
 
     if demo_mode:
         print(f"Running in DEMO mode with sample data for ticker: {ticker}...")
-        print("(Use without --demo flag for real data with API key)\n")
+        print("(Use without --demo flag for real data from Yahoo Finance)\n")
         stock_data = get_demo_data(ticker)
     else:
-        print(f"Fetching TSMC stock price for ticker: {ticker}...")
-        stock_data = get_tsmc_stock_price(ticker, api_key)
+        print(f"Fetching stock price for {ticker} from Yahoo Finance...")
+        print("This may take a few seconds...\n")
+        stock_data = get_tsmc_stock_price(ticker)
 
     print_stock_info(stock_data)
 
