@@ -6,6 +6,9 @@ package com.example.jmx;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
 
 /**
  * Main application that exposes system information via JMX.
@@ -30,6 +33,20 @@ public class App {
 
             // Register the MBean
             mBeanServer.registerMBean(systemInfo, objectName);
+
+            Game game = new Game();
+            game.setPlayerName("Eric");
+//            mBeanServer.registerMBean(game, new ObjectName("com.example.jmx:type=basic,name=game"));
+            Hashtable<String,String> props = new Hashtable<>();
+            props.put("application-id", "app-id-1323");       // instance keys
+            props.put("bike", "bike1");                  // “Type / category”
+            props.put("client-id", "client-abcd");         // instance keys
+            var obj = new ObjectName("com.example.jmx", props);     // domain is top folder
+            mBeanServer.registerMBean(game, obj);
+//            mBeanServer.registerMBean(game, new ObjectName("com.example.jmx:type=basic,name=game"));
+
+            var m = new HashMap<>();
+            var l = new ArrayList();
 
             System.out.println("========================================");
             System.out.println("JMX POC Application Started Successfully");
@@ -70,5 +87,9 @@ public class App {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    public Object getGreeting() {
+        return "hello";
     }
 }
