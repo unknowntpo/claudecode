@@ -7,14 +7,10 @@ __pycache__/
 env/
 venv/
 ENV/
-build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -23,12 +19,29 @@ wheels/
 .installed.cfg
 *.egg
 
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Gradle
+.gradle/
+build/
+dist/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
 # IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.iml
+*.ipr
+*.iws
 
 # OS
 .DS_Store
