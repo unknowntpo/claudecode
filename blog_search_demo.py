@@ -300,9 +300,21 @@ def main():
 
     print(f"{Fore.WHITE}Initializing connections...")
 
-    # Initialize searchers
-    pg_searcher = PostgresSearcher(POSTGRES_CONFIG)
-    es_searcher = ElasticsearchSearcher(ELASTICSEARCH_CONFIG)
+    # Initialize searchers with error handling
+    try:
+        print(f"{Fore.WHITE}Connecting to PostgreSQL at {POSTGRES_CONFIG['host']}:{POSTGRES_CONFIG['port']}...")
+        pg_searcher = PostgresSearcher(POSTGRES_CONFIG)
+    except Exception as e:
+        print(f"{Fore.RED}✗ Failed to connect to PostgreSQL: {e}")
+        raise
+
+    try:
+        print(f"{Fore.WHITE}Connecting to Elasticsearch at {ELASTICSEARCH_CONFIG['hosts'][0]}...")
+        es_searcher = ElasticsearchSearcher(ELASTICSEARCH_CONFIG)
+    except Exception as e:
+        print(f"{Fore.RED}✗ Failed to connect to Elasticsearch: {e}")
+        pg_searcher.close()
+        raise
 
     # Generate sample blog posts
     print(f"\n{Fore.WHITE}Generating 100 sample blog posts...")
@@ -374,11 +386,15 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
     try:
         main()
+        sys.exit(0)
     except KeyboardInterrupt:
         print(f"\n{Fore.RED}Demo interrupted by user")
+        sys.exit(130)
     except Exception as e:
         print(f"\n{Fore.RED}Error: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
