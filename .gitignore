@@ -33,3 +33,17 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# uv package manager
+.uv/
+uv.lock
+
+# Demo outputs
+demo_output.txt
+demo_report.md
+es_stats.txt
+sample_data.json
+artifacts/
+
+# Logs
+*.log

@@ -1,5 +1,8 @@
 # Blog Post Search Demo: PostgreSQL vs Elasticsearch
 
+[![Blog Search Demo CI](https://github.com/unknowntpo/claudecode/actions/workflows/blog-search-demo.yml/badge.svg)](https://github.com/unknowntpo/claudecode/actions/workflows/blog-search-demo.yml)
+[![Manual Demo Run](https://github.com/unknowntpo/claudecode/actions/workflows/manual-demo-run.yml/badge.svg)](https://github.com/unknowntpo/claudecode/actions/workflows/manual-demo-run.yml)
+
 A comprehensive demonstration comparing full-text search capabilities between PostgreSQL and Elasticsearch for blog post indexing and searching.
 
 ## Architecture
@@ -205,6 +208,65 @@ docker-compose down
 # Stop and remove volumes (deletes all data)
 docker-compose down -v
 ```
+
+## GitHub Actions CI/CD
+
+This project includes automated CI/CD workflows that run the demo and export results as artifacts.
+
+### Automatic Workflow
+
+**Workflow:** `blog-search-demo.yml`
+
+Automatically runs on:
+- Push to `main`, `master`, or any `claude/**` branch
+- Pull requests to `main` or `master`
+
+Features:
+- ✅ Runs the full demo in a clean CI environment
+- ✅ Tests compatibility with Python 3.8-3.12
+- ✅ Uploads demo output as artifacts (30-day retention)
+- ✅ Comments on PRs with demo results
+- ✅ Creates workflow summaries
+
+**View Results:** Check the [Actions tab](https://github.com/unknowntpo/claudecode/actions) for run history and artifacts.
+
+### Manual Workflow
+
+**Workflow:** `manual-demo-run.yml`
+
+Run on-demand with custom parameters:
+
+1. Go to [Actions > Manual Demo Run](https://github.com/unknowntpo/claudecode/actions/workflows/manual-demo-run.yml)
+2. Click "Run workflow"
+3. Configure parameters:
+   - **Number of posts:** Default 100
+   - **Search queries:** Comma-separated custom queries
+
+Features:
+- 🎯 Customizable demo parameters
+- 📊 Detailed reports with service health checks
+- 📦 Comprehensive artifacts (90-day retention):
+  - `demo_output.txt` - Raw output
+  - `demo_report.md` - Formatted report
+  - `es_stats.txt` - Elasticsearch statistics
+  - `sample_data.json` - Sample indexed data
+- 📝 Workflow summary with status and links
+
+### Accessing Artifacts
+
+After a workflow run:
+
+1. Navigate to the workflow run in the [Actions tab](https://github.com/unknowntpo/claudecode/actions)
+2. Scroll to the "Artifacts" section at the bottom
+3. Download `blog-search-demo-output-*` or `demo-report-*`
+4. Unzip and view the results
+
+**Artifact Contents:**
+- Complete demo output with timestamps
+- Performance comparisons
+- Search result examples
+- Service health information
+- Elasticsearch index statistics (manual runs)
 
 ## Troubleshooting
 
