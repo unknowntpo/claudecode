@@ -82,18 +82,48 @@ jobs:
       - name: Verify services are running
         run: |
           echo "Checking PostgreSQL..."
-          pg_isready -h localhost -p 15432 -U bloguser
+          PGPASSWORD=blogpass psql -h localhost -p 15432 -U bloguser -d blogdb -c "SELECT version();"
 
           echo "Checking Elasticsearch..."
-          curl -f http://localhost:19200/_cluster/health
+          curl -f http://localhost:19200/_cluster/health?pretty
 
           echo "All services are ready!"
+
+      - name: Test database connection
+        run: |
+          echo "Testing PostgreSQL connection with Python..."
+          uv run python -c "
+          import psycopg2
+          conn = psycopg2.connect(
+              host='localhost',
+              port=15432,
+              database='blogdb',
+              user='bloguser',
+              password='blogpass'
+          )
+          print('✓ PostgreSQL connection successful')
+          conn.close()
+          "
+
+          echo "Testing Elasticsearch connection with Python..."
+          uv run python -c "
+          from elasticsearch import Elasticsearch
+          es = Elasticsearch(['http://localhost:19200'])
+          print('✓ Elasticsearch connection successful')
+          print('Cluster health:', es.cluster.health())
+          "
 
       - name: Run blog search demo
         id: run_demo
         run: |
           echo "Running blog search demo..."
-          uv run blog_search_demo.py 2>&1 | tee demo_output.txt
+          uv run python blog_search_demo.py 2>&1 | tee demo_output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "Demo exit code: $exit_code"
+          if [ $exit_code -ne 0 ]; then
+            echo "Demo failed with exit code $exit_code"
+            exit $exit_code
+          fi
           echo "Demo completed successfully!"
         continue-on-error: false
 
@@ -233,6 +263,22 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Test connections
+        run: |
+          uv run python -c "
+          import psycopg2
+          from elasticsearch import Elasticsearch
+
+          # Test PostgreSQL
+          conn = psycopg2.connect(host='localhost', port=15432, database='blogdb', user='bloguser', password='blogpass')
+          print('✓ PostgreSQL OK')
+          conn.close()
+
+          # Test Elasticsearch
+          es = Elasticsearch(['http://localhost:19200'])
+          print('✓ Elasticsearch OK')
+          "
+
       - name: Run demo (quick test)
         run: |
-          timeout 120s uv run blog_search_demo.py || exit 1
+          timeout 120s uv run python blog_search_demo.py || exit 1

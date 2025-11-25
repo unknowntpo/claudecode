@@ -82,6 +82,25 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Test database connections
+        run: |
+          echo "Testing connections..."
+          uv run python -c "
+          import psycopg2
+          from elasticsearch import Elasticsearch
+
+          # Test PostgreSQL
+          conn = psycopg2.connect(host='localhost', port=15432, database='blogdb', user='bloguser', password='blogpass')
+          print('✓ PostgreSQL connection successful')
+          conn.close()
+
+          # Test Elasticsearch
+          es = Elasticsearch(['http://localhost:19200'])
+          health = es.cluster.health()
+          print('✓ Elasticsearch connection successful')
+          print('✓ Cluster status:', health['status'])
+          "
+
       - name: Run blog search demo
         run: |
           echo "Running demo with ${{ inputs.num_posts }} blog posts"
@@ -89,8 +108,14 @@ jobs:
 
           # Run the demo and capture output with timestamps
           echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Starting demo..." | tee demo_output.txt
-          uv run blog_search_demo.py 2>&1 | tee -a demo_output.txt
-          echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Demo completed!" | tee -a demo_output.txt
+          uv run python blog_search_demo.py 2>&1 | tee -a demo_output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Demo completed with exit code: $exit_code" | tee -a demo_output.txt
+
+          if [ $exit_code -ne 0 ]; then
+            echo "Demo failed!"
+            exit $exit_code
+          fi
 
       - name: Create detailed report
         if: always()
