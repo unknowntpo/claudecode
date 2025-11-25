@@ -1,0 +1,19 @@
+[project]
+name = "blog-search-demo"
+version = "1.0.0"
+description = "Blog post search demo comparing PostgreSQL and Elasticsearch"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "psycopg2-binary>=2.9.9",
+    "elasticsearch>=8.11.0",
+    "faker>=20.1.0",
+    "colorama>=0.4.6",
+]
+
+[project.scripts]
+blog-search-demo = "blog_search_demo:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

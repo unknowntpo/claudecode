@@ -31,7 +31,7 @@ This project demonstrates the differences in:
 
 - Docker and Docker Compose
 - Python 3.8+
-- pip (Python package manager)
+- [uv](https://github.com/astral-sh/uv) (Fast Python package manager)
 
 ## Setup Instructions
 
@@ -52,8 +52,23 @@ Wait for all services to be healthy (may take 1-2 minutes for Elasticsearch).
 
 ### 2. Install Python Dependencies
 
+Using `uv` (recommended - fast and efficient):
+
 ```bash
-# Create a virtual environment (recommended)
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies (uv automatically creates and manages virtual environment)
+uv sync
+
+# Or run directly without explicit sync
+uv run blog_search_demo.py
+```
+
+Alternative using pip:
+
+```bash
+# Create a virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
@@ -63,13 +78,34 @@ pip install -r requirements.txt
 
 ### 3. Run the Demo
 
+Using `uv`:
+
 ```bash
-# Make the script executable
-chmod +x blog_search_demo.py
+# Run directly with uv (automatically manages dependencies)
+uv run blog_search_demo.py
+
+# Or use the script entry point
+uv run blog-search-demo
+```
+
+Using traditional Python:
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Run the demo
 python blog_search_demo.py
 ```
+
+## Why uv?
+
+`uv` is an extremely fast Python package installer and resolver written in Rust. Benefits include:
+- **10-100x faster** than pip for package installation
+- **Automatic virtual environment management** - no need to manually create/activate
+- **Better dependency resolution** with detailed conflict reporting
+- **Drop-in replacement** for pip with familiar commands
+- **Built-in project management** via pyproject.toml
 
 ## What the Demo Does
 
