@@ -1,0 +1,23 @@
+[project]
+name = "kafka-scalability-test"
+version = "0.1.0"
+description = "Kafka scalability testing with Python, k6, Prometheus, and Grafana"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "confluent-kafka>=2.3.0",
+    "prometheus-client>=0.19.0",
+    "python-json-logger>=2.0.7",
+]
+
+[project.scripts]
+producer = "producer.app:main"
+consumer = "consumer.app:main"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "httpx>=0.26.0",
+]

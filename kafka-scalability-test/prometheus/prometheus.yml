@@ -1,0 +1,34 @@
+# Prometheus Configuration for Kafka Scalability Test
+# ====================================================
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Producer metrics (FastAPI app)
+  - job_name: 'producer'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: /metrics
+
+  # Consumer metrics (multiple instances possible)
+  - job_name: 'consumer'
+    static_configs:
+      # Add more targets as you scale consumers
+      - targets:
+        - 'host.docker.internal:9100'  # Consumer 1
+        - 'host.docker.internal:9101'  # Consumer 2
+        - 'host.docker.internal:9102'  # Consumer 3
+        - 'host.docker.internal:9103'  # Consumer 4
+        - 'host.docker.internal:9104'  # Consumer 5
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: 'host.docker.internal:(\d+)'
+        target_label: consumer_port
+        replacement: '${1}'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
