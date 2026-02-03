@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """
 Minimal smallpond example - data processing with DuckDB
+Ray dashboard available at http://localhost:8265
 """
 import os
+import time
+import numpy as np
 import pandas as pd
 import smallpond
+import ray
 
-# Create sample data
+# Create sample data - larger dataset for better observation
 print("Creating sample stock price data...")
+np.random.seed(42)
+# Generate larger dataset for better Ray dashboard observation
+tickers = ["AAPL", "GOOGL", "MSFT", "AMZN", "META", "NVDA", "TSLA", "AMD"]
+n_rows = 10000
 data = {
-    "ticker": ["AAPL", "AAPL", "AAPL", "GOOGL", "GOOGL", "GOOGL", "MSFT", "MSFT", "MSFT"],
-    "date": ["2024-01-01", "2024-01-02", "2024-01-03"] * 3,
-    "price": [150.0, 152.5, 151.0, 140.0, 142.0, 141.5, 380.0, 385.0, 382.0],
-    "volume": [1000000, 1200000, 1100000, 800000, 900000, 850000, 500000, 600000, 550000],
+    "ticker": np.random.choice(tickers, n_rows),
+    "date": pd.date_range("2020-01-01", periods=n_rows // len(tickers), freq="h").tolist() * len(tickers),
+    "price": np.random.uniform(100, 500, n_rows),
+    "volume": np.random.randint(100000, 10000000, n_rows),
 }
 
 # Save sample data as parquet
@@ -45,3 +53,24 @@ print("\nResults:")
 print(df_result.to_pandas())
 
 print("\nSmallpond example completed successfully!")
+
+# Keep Ray cluster alive for dashboard observation
+print("\n" + "="*50)
+print("Ray Dashboard: http://localhost:8265")
+print("="*50)
+print("\nKeeping Ray cluster alive for observation...")
+print("Press Ctrl+C to stop\n")
+
+try:
+    while True:
+        time.sleep(10)
+        # Run periodic queries to show activity
+        df = sp.read_parquet("data/prices.parquet")
+        df_agg = sp.partial_sql(
+            "SELECT ticker, AVG(price) as avg_price FROM {0} GROUP BY ticker",
+            df
+        )
+        print(f"[{time.strftime('%H:%M:%S')}] Processed {n_rows} rows - Ray dashboard active")
+except KeyboardInterrupt:
+    print("\nShutting down...")
+    ray.shutdown()
