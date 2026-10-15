@@ -1,47 +1,16 @@
-// Bun server: runs the simulated coordinators and pushes snapshots over a WebSocket.
+// Bun server: pushes streams-group snapshots over a WebSocket.
+// MODE=real (default) reads a live Kafka broker, MODE=sim runs the in-process simulator.
 // In production it also serves the built Vue app from ./dist.
 
-import type { ClientMessage, Snapshot } from '../shared/types'
-import { createGroups } from './topologies'
+import type { ClientMessage } from '../shared/types'
+import type { Backend } from './backend'
+import { RealBackend } from './real/backend'
+import { SimBackend } from './sim'
 
 const TICK_MS = 250
 const DIST = `${import.meta.dir}/../dist`
 
-let groups = createGroups()
-let paused = false
-
-const snapshot = (): Snapshot => {
-  const now = Date.now()
-  return { paused, groups: groups.map((g) => g.view(now)) }
-}
-
-function handle(msg: ClientMessage) {
-  if (msg.type === 'reset') {
-    groups = createGroups()
-    paused = false
-    return
-  }
-  if (msg.type === 'togglePause') {
-    paused = !paused
-    return
-  }
-  const group = groups.find((g) => g.groupId === msg.groupId)
-  if (!group) return
-  switch (msg.type) {
-    case 'addMember':
-      group.addMember(Date.now(), msg.processId)
-      break
-    case 'leaveMember':
-      group.leave(msg.memberId)
-      break
-    case 'crashMember':
-      group.crash(msg.memberId)
-      break
-    case 'setStandbyReplicas':
-      group.setStandbyReplicas(msg.value)
-      break
-  }
-}
+const backend: Backend = process.env.MODE === 'sim' ? new SimBackend() : new RealBackend()
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
@@ -57,11 +26,11 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       ws.subscribe('state')
-      ws.send(JSON.stringify(snapshot()))
+      ws.send(JSON.stringify(backend.snapshot()))
     },
-    message(_ws, raw) {
+    async message(_ws, raw) {
       try {
-        handle(JSON.parse(String(raw)) as ClientMessage)
+        await backend.handle(JSON.parse(String(raw)) as ClientMessage)
         broadcast()
       } catch (err) {
         console.error('bad message', err)
@@ -70,25 +39,19 @@ const server = Bun.serve({
   },
 })
 
-let lastTick = Date.now()
 function broadcast() {
-  server.publish('state', JSON.stringify(snapshot()))
+  server.publish('state', JSON.stringify(backend.snapshot()))
 }
 
-setInterval(() => {
-  const now = Date.now()
-  // While paused, shift member timers so nothing "times out" on resume.
-  if (paused) {
-    for (const g of groups)
-      for (const m of g.members.values()) {
-        m.lastHeartbeat += now - lastTick
-        m.nextHeartbeat += now - lastTick
-      }
-  } else {
-    for (const g of groups) g.tick(now)
-  }
-  lastTick = now
+setInterval(async () => {
+  await backend.tick()
   broadcast()
 }, TICK_MS)
 
-console.log(`streams-group simulator listening on http://localhost:${server.port}`)
+for (const signal of ['SIGINT', 'SIGTERM'] as const)
+  process.on(signal, () => {
+    backend.close()
+    process.exit(0)
+  })
+
+console.log(`streams-group dashboard (${process.env.MODE === 'sim' ? 'sim' : 'real'} mode) on http://localhost:${server.port}`)

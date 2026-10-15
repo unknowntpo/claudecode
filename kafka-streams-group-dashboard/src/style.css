@@ -49,7 +49,7 @@ select { font: inherit; background: var(--panel); color: var(--text); border: 1p
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
 .badge.STABLE { background: var(--active-bg); color: var(--active); }
 .badge.RECONCILING, .badge.UNREVOKED_TASKS, .badge.UNRELEASED_TASKS { background: var(--revoke-bg); color: var(--revoke); }
-.badge.ASSIGNING { background: var(--standby-bg); color: var(--standby); }
+.badge.ASSIGNING, .badge.NOT_READY { background: var(--standby-bg); color: var(--standby); }
 .badge.EMPTY, .badge.joining { background: var(--border); color: var(--muted); }
 .badge.crashed { background: var(--danger); color: #fff; }
 .muted { color: var(--muted); }

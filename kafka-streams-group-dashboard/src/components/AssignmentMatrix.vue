@@ -21,11 +21,16 @@ function cell(m: MemberView, t: TaskId): Cell {
   if (m.assignment.standby.includes(t)) return { label: 'S', cls: 'standby', title: 'standby task (owned)' }
   if (m.target.active.includes(t)) return { label: 'A', cls: 'active target', title: 'target: active, not yet owned' }
   if (m.target.standby.includes(t)) return { label: 'S', cls: 'standby target', title: 'target: standby, not yet owned' }
+  if (m.assignment.warmup?.includes(t)) return { label: 'W', cls: 'standby warmup', title: 'warm-up task (restoring state)' }
   return null
 }
 
 const ownerCount = (t: TaskId) => props.group.members.filter((m) => m.assignment.active.includes(t)).length
 const subtopologyOf = (t: TaskId) => t.split('_')[0]
+/** Placeholders of starting processes share a memberId, so key by process too. */
+const key = (m: MemberView) => `${m.processId}/${m.memberId}`
+const alive = (processId: string) =>
+  props.group.members.some((m) => m.processId === processId && m.status !== 'crashed')
 </script>
 
 <template>
@@ -35,6 +40,7 @@ const subtopologyOf = (t: TaskId) => t.split('_')[0]
       <span><i class="active">A</i> active</span>
       <span><i class="standby">S</i> standby</span>
       <span><i class="active target">A</i> target, not owned yet</span>
+      <span><i class="standby warmup">W</i> warm-up</span>
       <span><i class="revoke">A</i> revoking</span>
       <span><i class="none">!</i> task currently not processed</span>
     </div>
@@ -45,28 +51,30 @@ const subtopologyOf = (t: TaskId) => t.split('_')[0]
             <th />
             <th v-for="p in processes" :key="p.processId" :colspan="p.members.length" class="process">
               {{ p.processId }}
-              <button title="Start one more StreamThread in this process" @click="send({ type: 'addMember', groupId: group.groupId, processId: p.processId })">
-                + thread
-              </button>
+              <div v-if="alive(p.processId)" class="btns">
+                <button title="Start one more StreamThread in this process" @click="send({ type: 'addMember', groupId: group.groupId, processId: p.processId })">
+                  + thread
+                </button>
+                <button title="Graceful shutdown: members leave the group (heartbeat with epoch -1)" @click="send({ type: 'stopProcess', groupId: group.groupId, processId: p.processId })">
+                  stop
+                </button>
+                <button class="danger" title="kill -9: no more heartbeats, fenced after the session timeout" @click="send({ type: 'killProcess', groupId: group.groupId, processId: p.processId })">
+                  kill
+                </button>
+              </div>
             </th>
           </tr>
           <tr>
             <th />
-            <th v-for="m in members" :key="m.memberId" class="member">
+            <th v-for="m in members" :key="key(m)" class="member">
               <div class="mono id">{{ m.memberId }}</div>
               <div class="mono muted">epoch {{ m.memberEpoch }}</div>
               <span class="badge" :class="m.status === 'alive' ? m.state : m.status">
                 {{ m.status === 'alive' ? m.state : m.status }}
               </span>
-              <div v-if="m.status !== 'crashed'" class="btns">
-                <button title="Graceful shutdown (heartbeat with epoch -1)" @click="send({ type: 'leaveMember', groupId: group.groupId, memberId: m.memberId })">
-                  leave
-                </button>
-                <button class="danger" title="Stop heart-beating; fenced after session timeout" @click="send({ type: 'crashMember', groupId: group.groupId, memberId: m.memberId })">
-                  crash
-                </button>
+              <div v-if="m.status === 'crashed'" class="mono muted">
+                waiting for session timeout<template v-if="m.msSinceHeartbeat"> ({{ (m.msSinceHeartbeat / 1000).toFixed(1) }}s)</template>
               </div>
-              <div v-else class="mono muted">silent {{ (m.msSinceHeartbeat / 1000).toFixed(1) }}s</div>
             </th>
           </tr>
         </thead>
@@ -80,7 +88,7 @@ const subtopologyOf = (t: TaskId) => t.split('_')[0]
               {{ t }}
               <i v-if="members.some((m) => m.status !== 'joining') && ownerCount(t) === 0" class="none" title="no member owns this active task right now">!</i>
             </th>
-            <td v-for="m in members" :key="m.memberId">
+            <td v-for="m in members" :key="key(m)">
               <i v-if="cell(m, t)" :class="cell(m, t)!.cls" :title="cell(m, t)!.title">{{ cell(m, t)!.label }}</i>
             </td>
           </tr>
@@ -98,7 +106,7 @@ const subtopologyOf = (t: TaskId) => t.split('_')[0]
 table { border-collapse: collapse; }
 th, td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
 th.process { background: var(--bg); font-weight: 600; }
-th.process button { margin-left: 6px; padding: 1px 6px; font-size: 11px; }
+th.process .btns { margin-top: 4px; }
 th.member { min-width: 130px; font-weight: normal; vertical-align: top; }
 .member .id { font-weight: 600; }
 .member .badge { margin: 4px 0; font-size: 10px; }
@@ -112,6 +120,7 @@ i {
 }
 i.active { background: var(--active-bg); color: var(--active); border: 1.5px solid var(--active); }
 i.standby { background: var(--standby-bg); color: var(--standby); border: 1.5px solid var(--standby); }
+i.warmup { border-style: dotted; }
 i.target { background: transparent; border-style: dashed; opacity: .8; }
 i.revoke { background: var(--revoke-bg); color: var(--revoke); border: 1.5px solid var(--revoke); text-decoration: line-through; }
 i.none { width: 18px; height: 18px; margin-left: 4px; background: var(--danger); color: #fff; border-radius: 50%; }

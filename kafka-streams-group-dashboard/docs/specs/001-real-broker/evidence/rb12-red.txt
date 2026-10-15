@@ -1,0 +1,8 @@
+Expected: "NOT_READY"
+Received: "ASSIGNING"
+(fail) mapping > RB12: broker state NOT_READY (missing source topics) [6.93ms]
+Expected: "EMPTY"
+Received: "ASSIGNING"
+(fail) mapping > RB12: broker state DEAD [0.21ms]
+ 20 pass
+ 2 fail

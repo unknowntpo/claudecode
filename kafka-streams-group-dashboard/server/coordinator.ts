@@ -110,6 +110,14 @@ export class StreamsGroup {
     this.log('member', `${memberId} crashed (no more heartbeats, fenced after ${SESSION_TIMEOUT_MS / 1000}s session timeout)`)
   }
 
+  stopProcess(processId: string) {
+    for (const m of [...this.members.values()]) if (m.processId === processId) this.leave(m.memberId)
+  }
+
+  killProcess(processId: string) {
+    for (const m of this.members.values()) if (m.processId === processId) this.crash(m.memberId)
+  }
+
   setStandbyReplicas(value: number) {
     const v = Math.max(0, Math.min(3, Math.floor(value)))
     if (v === this.numStandbyReplicas) return

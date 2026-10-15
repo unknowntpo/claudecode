@@ -1,0 +1,4 @@
+Received: "cannot reach the inspector / broker (inspector HTTP 500). Is `docker compose up -d` running?"
+(fail) real broker > (unnamed) [60192.15ms]
+ 0 pass
+ 1 fail

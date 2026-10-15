@@ -1,0 +1,95 @@
+$ E2E=1 bun test e2e
+bun test v1.3.13 (bf2e2cec)
+READY 18085
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-A]
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+READY
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-C]
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-B]
+READY
+READY
+[consumer_background_thread] ERROR org.apache.kafka.clients.consumer.internals.CommitRequestManager - [Consumer clientId=word-count-process-C-StreamThread-1-consumer, groupId=word-count] OffsetFetch failed with STALE_MEMBER_EPOCH and the consumer is not part of the group anymore (it probably left the group, got fenced or failed). The request cannot be retried and will fail.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-D]
+READY
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-E]
+READY
+
+e2e/real-broker.test.ts:
+RB13 measured: STABLE 2911 ms after starting the second process
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-F]
+READY
+thread-added word-count-process-F-StreamThread-2
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-G]
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-H]
+READY
+READY
+[consumer_background_thread] ERROR org.apache.kafka.clients.consumer.internals.CommitRequestManager - [Consumer clientId=word-count-process-G-StreamThread-1-consumer, groupId=word-count] OffsetFetch failed with STALE_MEMBER_EPOCH and the consumer is not part of the group anymore (it probably left the group, got fenced or failed). The request cannot be retried and will fail.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-I]
+READY
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-K]
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-J]
+READY
+READY
+[consumer_background_thread] ERROR org.apache.kafka.clients.consumer.internals.CommitRequestManager - [Consumer clientId=word-count-process-J-StreamThread-1-consumer, groupId=word-count] OffsetFetch failed with STALE_MEMBER_EPOCH and the consumer is not part of the group anymore (it probably left the group, got fenced or failed). The request cannot be retried and will fail.
+RB7 measured: fenced and reassigned 11375 ms after SIGKILL
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-L]
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-M]
+READY
+READY
+[consumer_background_thread] ERROR org.apache.kafka.clients.consumer.internals.CommitRequestManager - [Consumer clientId=word-count-process-L-StreamThread-1-consumer, groupId=word-count] OffsetFetch failed with STALE_MEMBER_EPOCH and the consumer is not part of the group anymore (it probably left the group, got fenced or failed). The request cannot be retried and will fail.
+RB8 measured: left 952 ms after SIGTERM
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-N]
+READY
+[kafka-admin-client-thread | adminclient-1] WARN org.apache.kafka.clients.NetworkClient - [AdminClient clientId=adminclient-1] Connection to node -1 (localhost/127.0.0.1:9092) could not be established. Node may not be available.
+org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: describeStreamsGroups(api=STREAMS_GROUP_DESCRIBE)
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - The streams rebalance protocol is still in development and should not be used in production. Please set group.protocol=classic (default) in all production use cases.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.StreamsConfig - Warmup replicas are not supported yet with the streams protocol and will be ignored. If you want to use warmup replicas, please set group.protocol=classic.
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-O]
+[main] WARN org.apache.kafka.streams.processor.internals.StateDirectory - Using an OS temp directory in the state.dir property can cause failures with writing the checkpoint file due to the fact that this directory can be cleared by the OS. Resolved state.dir: [/var/folders/yt/l_0c2zg96r32wyfdnm81y8zm0000gn/T/ksgd/word-count-process-P]
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+READY
+READY
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[consumer_background_thread] ERROR org.apache.kafka.clients.consumer.internals.CommitRequestManager - [Consumer clientId=word-count-process-P-StreamThread-1-consumer, groupId=word-count] OffsetFetch failed with STALE_MEMBER_EPOCH and the consumer is not part of the group anymore (it probably left the group, got fenced or failed). The request cannot be retried and will fail.
+
+ 10 pass
+ 0 fail
+ 35 expect() calls
+Ran 10 tests across 1 file. [60.69s]

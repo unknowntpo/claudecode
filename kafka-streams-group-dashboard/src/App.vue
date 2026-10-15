@@ -14,7 +14,10 @@ const group = computed(() => snapshot.value?.groups.find((g) => g.groupId === se
   <header>
     <div>
       <h1>Streams Group Dashboard</h1>
-      <span class="muted">KIP-1071 · broker-side task assignment for Kafka Streams (simulated)</span>
+      <span class="muted">
+        KIP-1071 · broker-side task assignment for Kafka Streams ·
+        <strong data-testid="mode">{{ snapshot?.mode === 'real' ? 'live broker' : 'simulated' }}</strong>
+      </span>
     </div>
     <div class="actions">
       <span class="dot" :class="{ on: connected }" :title="connected ? 'connected' : 'disconnected'" />
@@ -22,6 +25,8 @@ const group = computed(() => snapshot.value?.groups.find((g) => g.groupId === se
       <button @click="send({ type: 'reset' })">↺ Reset</button>
     </div>
   </header>
+
+  <div v-if="snapshot?.error" class="banner" data-testid="error-banner" role="alert">{{ snapshot.error }}</div>
 
   <nav v-if="snapshot">
     <button
@@ -57,6 +62,9 @@ const group = computed(() => snapshot.value?.groups.find((g) => g.groupId === se
           >
             <option v-for="n in [0, 1, 2]" :key="n" :value="n">{{ n }}</option>
           </select>
+          <small v-if="snapshot?.mode === 'real'" class="muted note" data-testid="standby-note">
+            applies at the next rebalance; only stateful tasks get standbys
+          </small>
         </dd>
       </dl>
       <button @click="send({ type: 'addMember', groupId: group.groupId })">+ Start new process</button>
@@ -87,6 +95,8 @@ dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 
 dt { color: var(--muted); }
 dd { margin: 0; }
 .center { text-align: center; padding: 40px; }
+.banner { margin: 12px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--revoke-bg); color: var(--revoke); border: 1px solid var(--revoke); }
+.note { display: block; margin-top: 4px; }
 @media (max-width: 800px) {
   main { grid-template-columns: 1fr; padding: 12px 16px; }
   header, nav { padding-left: 16px; padding-right: 16px; }

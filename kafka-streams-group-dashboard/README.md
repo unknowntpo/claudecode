@@ -8,12 +8,23 @@ KIP-848 把 consumer group 的 partition assignment 搬到 broker；KIP-1071 延
 
 ## 跑起來
 
+預設接**真的 Kafka 4.1 broker**（Docker），每個「process」都是一個真的 Kafka Streams JVM（`group.protocol=streams`）。
+
 ```bash
 bun install
-bun run dev      # Bun 模擬器 :3000 + Vite dev server :5173 → 打開 http://localhost:5173
-bun test         # assignor / reconciliation 單元測試
-bun run start    # build 前端，再由 Bun 在 :3000 一起 serve
+docker compose up -d   # Kafka 4.1.0，開啟 streams group protocol
+bun run build:java     # 建 streams-app（Java 21 + Gradle）
+bun run dev            # 打開 http://localhost:5173
 ```
+
+沒有 Docker / Java 時可以用模擬器：`MODE=sim bun run dev`。
+
+| 指令 | 用途 |
+| --- | --- |
+| `bun run check` | 單元測試 + build + traceability + test-plan 檢查（本機 gate） |
+| `bun run test:e2e` | 對真 broker 跑 Spec 001 的 E2E |
+
+架構：Bun server 啟動 `streams-app inspect`（Java，包 `Admin#describeStreamsGroups`），每秒輪詢；按「Start new process」會 spawn `streams-app run <app> process-X 1`。規格見 [`docs/specs/001-real-broker/spec.md`](docs/specs/001-real-broker/spec.md)，流程見 [`docs/process/workflow.md`](docs/process/workflow.md)。
 
 ## 畫面上看得到什麼
 
@@ -24,7 +35,7 @@ bun run start    # build 前端，再由 Bun 在 :3000 一起 serve
 | Task assignment | 列 = task、欄 = member（依 process 分組，一個 StreamThread = 一個 member）。實心 = 已擁有、虛線 = target 但還沒拿到、橘色刪除線 = 等待 revoke、紅色 `!` = 該 task 目前沒有人在處理 |
 | Coordinator log | 每個 `StreamsGroupHeartbeat` request/response、epoch bump、assignor 計算結果 |
 
-可以操作：**Start new process**、**+ thread**、**leave**（graceful，heartbeat epoch = -1）、**crash**（停止 heartbeat，session timeout 8s 後被 fence）、調整 standby 數量、Pause / Reset。
+可以操作：**Start new process**、每個 process 的 **+ thread**、**stop**（SIGTERM，member 立刻 leave）、**kill**（SIGKILL，session timeout 10s 後被 fence）、調整 standby 數量（下次 rebalance 生效，只有 stateful task 會有 standby）、Pause / Reset。
 
 ## 範例 app
 
@@ -34,7 +45,7 @@ bun run start    # build 前端，再由 Bun 在 :3000 一起 serve
 | `order-enrichment` | 0: orders ⋈ customers（co-partitioned stream-table join） | 3 |
 | `page-view-sessions` | 0: session window count，預設 1 個 standby replica | 6 |
 
-## 模擬的 protocol 邏輯
+## 模擬器的 protocol 邏輯
 
 ```
 member ──StreamsGroupHeartbeat──▶ coordinator
@@ -58,11 +69,16 @@ shared/types.ts          server 與前端共用型別
 server/coordinator.ts    streams group coordinator 模擬（heartbeat、epoch、reconciliation、fencing）
 server/assignor.ts       sticky task assignor
 server/topologies.ts     三個範例 app
-server/index.ts          Bun.serve + WebSocket，每 250ms 推 snapshot
+server/index.ts          Bun.serve + WebSocket，每 250ms 推 snapshot；MODE 選 backend
+server/sim.ts            模擬器 backend
+server/real/             real backend（spawn JVM、輪詢 inspector）與 broker JSON → 畫面的轉換
+streams-app/             Java：`run`（Kafka Streams app）與 `inspect`（Admin API → JSON）
+e2e/                     對真 broker 的 E2E
 src/                     Vue 3 前端（App + 3 個 component）
 ```
 
 ## 限制
 
-這是**模擬器**，不連真的 Kafka，目的是把 protocol 行為看清楚。簡化之處：沒有 warm-up task、lag-based assignment、topology 驗證（`NOT_READY` / missing topics）、static membership。
-若要接真的叢集（Kafka 4.1+，broker 開啟 streams group），可以把 `server/` 換成定期呼叫 `StreamsGroupDescribe` API（或 `kafka-streams-groups.sh --describe --members --verbose`）並轉成同樣的 `GroupView` 格式，前端不用改。
+- Real 模式：member 的 reconciliation 狀態（UNREVOKED / UNRELEASED）是用 assignment vs target 推導的，broker 沒有直接提供；也沒有 heartbeat 時間。
+- 模擬器沒有 warm-up task、lag-based assignment、static membership。
+- 已知 workaround 見 [`docs/gardening.md`](docs/gardening.md)。

@@ -26,10 +26,13 @@ export interface Topology {
 export interface Assignment {
   active: TaskId[]
   standby: TaskId[]
+  /** Only reported by a real broker (warm-up tasks restore state before becoming active). */
+  warmup?: TaskId[]
 }
 
 export type MemberState = 'STABLE' | 'UNREVOKED_TASKS' | 'UNRELEASED_TASKS'
-export type GroupState = 'EMPTY' | 'ASSIGNING' | 'RECONCILING' | 'STABLE'
+/** NOT_READY only comes from a real broker (e.g. source topics missing). */
+export type GroupState = 'EMPTY' | 'NOT_READY' | 'ASSIGNING' | 'RECONCILING' | 'STABLE'
 
 export interface MemberView {
   memberId: string
@@ -71,14 +74,20 @@ export interface GroupView {
 }
 
 export interface Snapshot {
+  /** sim = in-process coordinator simulation, real = live Kafka broker. */
+  mode: 'sim' | 'real'
+  /** Set when the real backend cannot reach the broker / inspector. */
+  error?: string
   paused: boolean
   groups: GroupView[]
 }
 
 export type ClientMessage =
   | { type: 'addMember'; groupId: string; processId?: string }
-  | { type: 'leaveMember'; groupId: string; memberId: string }
-  | { type: 'crashMember'; groupId: string; memberId: string }
+  /** Graceful shutdown of a whole process (all its members leave the group). */
+  | { type: 'stopProcess'; groupId: string; processId: string }
+  /** Hard kill: the process stops heart-beating and is fenced after the session timeout. */
+  | { type: 'killProcess'; groupId: string; processId: string }
   | { type: 'setStandbyReplicas'; groupId: string; value: number }
   | { type: 'togglePause' }
   | { type: 'reset' }

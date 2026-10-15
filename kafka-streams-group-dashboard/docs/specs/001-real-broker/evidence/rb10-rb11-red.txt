@@ -1,0 +1,7 @@
+Expected to contain: "bun run build:java"
+Received: "starting inspector…"
+(fail) RealBackend failures > RB11: missing streams-app binary → error names build:java and nothing is spawned [1.45ms]
+Received: "cannot reach the inspector / broker (Unable to connect. Is the computer able to access the url?). Is `docker compose up -d` running?"
+(fail) RealBackend failures > RB10: inspector unreachable → error mentions it and the last known state stays [21.85ms]
+ 0 pass
+ 2 fail
