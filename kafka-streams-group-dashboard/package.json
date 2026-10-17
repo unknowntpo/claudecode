@@ -7,13 +7,13 @@
     "server": "bun server/index.ts",
     "build": "vue-tsc --noEmit && vite build",
     "start": "bun run build && bun server/index.ts",
-    "test": "bun test server scripts",
+    "test": "bun test server scripts src",
     "test:e2e": "E2E=1 bun test e2e",
     "build:java": "gradle -q -p streams-app installDist",
     "check:traceability": "bun scripts/check-spec-traceability.ts",
     "docs:test-plan": "bun scripts/render-test-plan.ts",
     "check:test-plan": "bun scripts/render-test-plan.ts --check",
-    "check": "bun test server scripts && bun run build && bun run check:traceability && bun run check:test-plan"
+    "check": "bun test server scripts src && bun run build && bun run check:traceability && bun run check:test-plan"
   },
   "dependencies": {
     "vue": "^3.5.44"

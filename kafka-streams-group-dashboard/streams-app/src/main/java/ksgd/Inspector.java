@@ -279,16 +279,18 @@ final class Inspector {
         Map<String, Long> sums = new LinkedHashMap<>();
         if (req.isEmpty()) return sums;
         var result = admin.listOffsets(req);
+        // A partition that vanished between describeTopics and listOffsets drops the whole topic
+        // (endOffset absent, Spec 002 Behavior 2), whatever order its partitions come in.
+        java.util.Set<String> failed = new java.util.HashSet<>();
         for (TopicPartition tp : req.keySet()) {
             try {
                 long off = result.partitionResult(tp).get().offset();
                 sums.merge(tp.topic(), off, Long::sum);
             } catch (ExecutionException e) {
-                // a partition that vanished between describeTopics and listOffsets: drop the whole topic
-                sums.put(tp.topic(), null);
+                failed.add(tp.topic());
             }
         }
-        sums.values().removeIf(java.util.Objects::isNull);
+        sums.keySet().removeAll(failed);
         return sums;
     }
 

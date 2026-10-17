@@ -10,6 +10,7 @@ export type Change =
   | 'group epoch bumped'
   | 'target assignment epoch bumped'
   | 'member assignment changed'
+  | 'member standby changed'
   | 'member epoch bumped'
 
 export interface EventCase {
@@ -28,5 +29,6 @@ export const testPlanRows: EventCase[] = [
   { id: 'RB15', change: 'group epoch bumped', expectedKinds: 'epoch', expectedMessageContains: 'group epoch → 4' },
   { id: 'RB15', change: 'target assignment epoch bumped', expectedKinds: 'assignor', expectedMessageContains: 'target assignment epoch 4' },
   { id: 'RB15', change: 'member assignment changed', expectedKinds: 'heartbeat', expectedMessageContains: 'm-1 memberEpoch=3 active=[0_0]' },
+  { id: 'RB15', change: 'member standby changed', expectedKinds: 'heartbeat', expectedMessageContains: 'm-1 memberEpoch=3 active=[0_0] standby=[1_0]' },
   { id: 'RB15', change: 'member epoch bumped', expectedKinds: 'heartbeat', expectedMessageContains: 'm-1 memberEpoch=4' },
 ]

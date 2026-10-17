@@ -27,7 +27,7 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
 | Edge / node | Shown |
 | --- | --- |
 | `text-lines` → Subtopology 0 | `text-lines` · 5.0 rec/s |
-| Subtopology 0 → Subtopology 1 | `word-count-counts-store-repartition` · ≈ 40 rec/s (≈ 8 words per line) |
+| Subtopology 0 → Subtopology 1 | `word-count-counts-store-repartition` · ≈ 32 rec/s (3–10 words per line, ≈ 6.5 on average) |
 | Subtopology 1 store | `↻ counts-store` · `word-count-counts-store-changelog` |
 | Subtopology 1 → `word-counts` | `word-counts` · > 0 rec/s (commit interval 1 s) |
 | Subtopology 0 | 4 tasks, lag ≈ 0 |
@@ -35,9 +35,11 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
 
 ## Behavior
 
-1. **Producer** (inspector): one background loop writes demo records: `text-lines` 5 lines/s,
+1. **Producer** (inspector): each inspector runs one background loop that writes demo records: `text-lines` 5 lines/s,
    `page-views` 5/s keyed `user-0..19`, `orders` 3/s keyed `cust-0..9`, `customers` 1/s keyed `cust-0..9`.
-   The inspector also creates the sink topics `word-counts`, `enriched-orders`, `user-sessions` (1 partition).
+   The rates are per inspector: two inspectors on the same broker (e.g. `bun run dev` and `bun run test:e2e`)
+   write twice as many records. The inspector also creates the sink topics `word-counts`, `enriched-orders`,
+   `user-sessions` (1 partition).
 2. **Inspector contract**, added to each group in `GET /groups`:
    - `topics`: `[{ "name", "kind": "source|repartition|changelog|sink", "endOffset" }]` for every topic of the
      group's topology plus its sink topics (static per app), `endOffset` = sum over partitions, omitted when
@@ -50,7 +52,8 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
    Σ over its source and repartition topics of (`endOffset` − `committed`), each term clamped at 0; `null` when
    any of those topics has no committed offset or no end offset, or the subtopology has no input topics.
 4. **Layout** (`pipelineLayout`): source topics → subtopologies in data-flow order (a subtopology whose inputs
-   are another's repartition sink comes after it) → sink topics. Each edge carries its topic, kind and rate.
+   are another's repartition sink comes after it) → sink topics. `pipelineLayout` returns topic names only; `PipelineGraph` takes the sink
+   topics (`kind: sink`) and each edge topic's rate from the group's `flow.topics`.
 5. **UI** in the design system: header (group name, `StateBadge`, `MetricStat`s: group epoch, target
    assignment epoch, members, tasks, input rate), `PipelineGraph`, inspector tabs **Tasks**
    (`AssignmentMatrix`, filtered to the selected subtopology), **Configuration** (`ConfigTable`), **Log**
@@ -98,6 +101,9 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
 | CS1 | ids opposite to the data flow: 0 reads the repartition topic 1 writes | 0:rep>;1:text-lines>rep | out | [text-lines] → 1 → [rep] → 0 → [out] |
 | CS1 | order-enrichment: two source topics into one node (join) | 0:orders,customers> | enriched-orders | [orders, customers] → 0 → [enriched-orders] |
 | CS1 | page-view-sessions: one stateful node | 0:page-views> | user-sessions | [page-views] → 0 → [user-sessions] |
+| CS1 | two independent subtopologies: id order, chained with an empty edge (Non-goal: branching) | 1:b>;0:a> | out | [a, b] → 0 → [] → 1 → [out] |
+| CS1 | two subtopologies read the same source topic: listed once | 0:a>rep;1:a,rep> | out | [a] → 0 → [rep] → 1 → [out] |
+| CS1 | a repartition input no subtopology writes does not hold its node back | 0:rep-x>;1:a> | out | [a] → 0 → [] → 1 → [out] |
 | CS1 | no topology yet (EMPTY group) |  | word-counts |  |
 <!-- test-plan:end -->
 

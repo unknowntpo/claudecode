@@ -18,7 +18,7 @@ that alters behavior.
 | --- | --- | --- |
 | Inspector `GET /groups?ids=` | `streams-app/src/main/java/ksgd/Inspector.java` | RB1, RB2, RB17 |
 | Inspector `POST /groups/<id>/standby` | same | RB5 |
-| Demo producer + sink topics | `streams-app/src/main/java/ksgd/DemoProducer.java` | CS6, CS8 |
+| Demo producer + sink topics (one producer per inspector: concurrent inspectors, e.g. dev + E2E, add up their rates) | `streams-app/src/main/java/ksgd/DemoProducer.java` | CS6, CS8 |
 | Flow math (rates, lag) | `server/real/flow.ts` | CS2, CS3, CS7, CS9, CS10 |
 | Pipeline layout, node filter | `shared/pipeline.ts` | CS1, CS4 |
 | Group configs (session timeout 10 s, heartbeat 2 s) | `Inspector.configureGroups` | RB7, RB13 |

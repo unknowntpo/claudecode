@@ -4,7 +4,7 @@
 export interface LayoutCase {
   id: string
   case: string
-  /** Subtopologies as "id:sources>repartitionSinks", sources may be repartition topics; ";" separated. */
+  /** Subtopologies as "id:sources>repartitionSinks", ";" separated; a source named `rep…` is a repartition topic. */
   subtopologies: string
   sinks: string
   expected: string
@@ -15,5 +15,8 @@ export const testPlanRows: LayoutCase[] = [
   { id: 'CS1', case: 'ids opposite to the data flow: 0 reads the repartition topic 1 writes', subtopologies: '0:rep>;1:text-lines>rep', sinks: 'out', expected: '[text-lines] → 1 → [rep] → 0 → [out]' },
   { id: 'CS1', case: 'order-enrichment: two source topics into one node (join)', subtopologies: '0:orders,customers>', sinks: 'enriched-orders', expected: '[orders, customers] → 0 → [enriched-orders]' },
   { id: 'CS1', case: 'page-view-sessions: one stateful node', subtopologies: '0:page-views>', sinks: 'user-sessions', expected: '[page-views] → 0 → [user-sessions]' },
+  { id: 'CS1', case: 'two independent subtopologies: id order, chained with an empty edge (Non-goal: branching)', subtopologies: '1:b>;0:a>', sinks: 'out', expected: '[a, b] → 0 → [] → 1 → [out]' },
+  { id: 'CS1', case: 'two subtopologies read the same source topic: listed once', subtopologies: '0:a>rep;1:a,rep>', sinks: 'out', expected: '[a] → 0 → [rep] → 1 → [out]' },
+  { id: 'CS1', case: 'a repartition input no subtopology writes does not hold its node back', subtopologies: '0:rep-x>;1:a>', sinks: 'out', expected: '[a] → 0 → [] → 1 → [out]' },
   { id: 'CS1', case: 'no topology yet (EMPTY group)', subtopologies: '', sinks: 'word-counts', expected: '' },
 ]

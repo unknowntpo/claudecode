@@ -13,8 +13,8 @@ const parseSubs = (s: string) =>
         const ins = inputs ? inputs.split(',') : []
         return {
           id,
-          sourceTopics: ins.filter((t) => t !== 'rep'),
-          repartitionSourceTopics: ins.filter((t) => t === 'rep'),
+          sourceTopics: ins.filter((t) => !t.startsWith('rep')),
+          repartitionSourceTopics: ins.filter((t) => t.startsWith('rep')),
           repartitionSinkTopics: outs ? outs.split(',') : [],
         }
       })
@@ -66,10 +66,65 @@ describe('computeFlow', () => {
   })
 })
 
+describe('computeFlow: word-count with a repartition topic', () => {
+  const rep = 'word-count-counts-store-repartition'
+  const wc = (topics: { name: string; kind: 'source' | 'repartition' | 'changelog' | 'sink'; endOffset?: number }[]) => ({
+    topics,
+    committed: { 'text-lines': 140, [rep]: 900 },
+    subtopologies: [
+      { id: '0', sourceTopics: ['text-lines'], repartitionSourceTopics: [] },
+      { id: '1', sourceTopics: [], repartitionSourceTopics: [rep] },
+    ],
+  })
+  const all = wc([
+    { name: 'text-lines', kind: 'source', endOffset: 150 },
+    { name: rep, kind: 'repartition', endOffset: 1000 },
+    { name: 'word-count-counts-store-changelog', kind: 'changelog', endOffset: 500 },
+    { name: 'word-counts', kind: 'sink', endOffset: 40 },
+  ])
+  const previous = { 'text-lines': 100, [rep]: 600, 'word-count-counts-store-changelog': 400, 'word-counts': 30 }
+
+  test('CS3: a subtopology fed by a repartition topic has lag from that topic', () => {
+    expect(computeFlow(all, previous, 10_000).lag).toEqual({ '0': 10, '1': 100 })
+  })
+
+  test('CS2: the input rate sums source topics only, not repartition, changelog or sink', () => {
+    const flow = computeFlow(all, previous, 10_000)
+    expect(flow.topics.map((t) => t.rate)).toEqual([5, 40, 10, 1]) // positive control: every topic has a rate
+    expect(flow.inputRate).toBe(5)
+  })
+
+  test('CS9: a topic missing from the previous poll has no rate yet, and the input rate is unknown', () => {
+    const twoSources = {
+      ...all,
+      topics: [...all.topics, { name: 'more-lines', kind: 'source' as const, endOffset: 70 }],
+    }
+    const flow = computeFlow(twoSources, previous, 10_000) // previous has no `more-lines`
+    expect(flow.topics.find((t) => t.name === 'more-lines')!.rate).toBeNull()
+    expect(flow.topics.find((t) => t.name === 'text-lines')!.rate).toBe(5)
+    expect(flow.inputRate).toBeNull()
+  })
+
+  test('CS9: a topic that does not exist has endOffset null, no rate, and its subtopology no lag', () => {
+    const flow = computeFlow(wc([{ name: 'text-lines', kind: 'source', endOffset: 150 }, { name: rep, kind: 'repartition' }]), { [rep]: 0 }, 10_000)
+    const t = flow.topics.find((x) => x.name === rep)!
+    expect(t.endOffset).toBeNull()
+    expect(t.rate).toBeNull()
+    expect(flow.lag).toEqual({ '0': 10, '1': null })
+  })
+
+  test('CS9: a group without source topics has an unknown input rate, not 0', () => {
+    const flow = computeFlow(wc([{ name: 'word-counts', kind: 'sink', endOffset: 40 }]), { 'word-counts': 30 }, 10_000)
+    expect(flow.topics[0].rate).toBe(1) // positive control: the sink still has a rate
+    expect(flow.inputRate).toBeNull()
+  })
+})
+
 describe('node filter', () => {
-  const tasks = ['0_0', '0_1', '1_0', '1_1']
+  const tasks = ['0_0', '0_1', '1_0', '1_1', '10_0']
   test('CS4: a selected subtopology keeps only its tasks; no selection keeps all', () => {
     expect(tasksOf(tasks, '1')).toEqual(['1_0', '1_1'])
+    expect(tasksOf(tasks, '10')).toEqual(['10_0'])
     expect(tasksOf(tasks, null)).toEqual(tasks)
   })
 })

@@ -1,0 +1,26 @@
+# Verifier gaps (commit 542b2db): each surviving mutant re-run against the new rows/tests.
+# 2026-10-17 13:22 CST; each mutant applied in a scratch copy, the named test file run, then reverted.
+# Script: python3 mutate.py <copy> (mutant table: id, file, original, mutant, test file).
+
+F7 (server/real/flow.ts: `if (previous == null ||` -> `if (previous === null ||`): caught by computeFlow: word-count with a repartition topic > CS9: a topic missing from the previous poll has no rate yet, and the input rate is unknown [0.43ms]
+F14 (server/real/flow.ts: `endOffset: t.endOffset ?? null,` -> `endOffset: t.endOffset ?? 0,`): caught by computeFlow: word-count with a repartition topic > CS9: a topic that does not exist has endOffset null, no rate, and its subtopology no lag [0.44ms]
+F8 (server/real/flow.ts: `sourceRates.every((r) => r !== null)` -> `sourceRates.some((r) => r !== null)`): caught by computeFlow: word-count with a repartition topic > CS9: a topic missing from the previous poll has no rate yet, and the input rate is unknown [0.33ms]
+F9 (server/real/flow.ts: `t.kind === 'source').map` -> `t.kind !== 'sink').map`): caught by computeFlow: word-count with a repartition topic > CS2: the input rate sums source topics only, not repartition, changelog or sink [0.32ms]
+F10 (server/real/flow.ts: `sourceRates.reduce((a, b) => a! + b!, 0) : null` -> `sourceRates.reduce((a, b) => a! + b!, 0) : sourceRates.length ? null : 0`): caught by computeFlow: word-count with a repartition topic > CS9: a group without source topics has an unknown input rate, not 0 [0.26ms]
+F13 (server/real/flow.ts: `[...s.sourceTopics, ...s.repartitionSourceTopics].map` -> `[...s.sourceTopics].map`): caught by computeFlow: word-count with a repartition topic > CS3: a subtopology fed by a repartition topic has lag from that topic [0.50ms]
+L1 (shared/pipeline.ts: `Number(a.id) - Number(b.id)` -> `Number(b.id) - Number(a.id)`): caught by layout > CS1: two independent subtopologies: id order, chained with an empty edge (Non-goal: branching) [0.28ms]
+L3 (shared/pipeline.ts: `produced.has(t) || !upstream.has(t)` -> `produced.has(t)`): caught by layout > CS1: a repartition input no subtopology writes does not hold its node back [0.21ms]
+L4 (shared/pipeline.ts: `sources: [...new Set(ordered.flatMap((s) => s.sourceTopics))]` -> `sources: ordered.flatMap((s) => s.sourceTopics)`): caught by layout > CS1: two subtopologies read the same source topic: listed once [0.60ms]
+L7 (shared/pipeline.ts: `t.split('_')[0] === subtopologyId` -> `t.startsWith(subtopologyId)`): caught by node filter > CS4: a selected subtopology keeps only its tasks; no selection keeps all [0.19ms]
+P1 (server/real/mapping.ts: `return i > 0 ?` -> `return i >= 0 ?`): caught by mapping > RB6: no label before -StreamThread: the rest is kept, never empty [0.19ms]
+P2 (server/real/mapping.ts: `if (!m.clientId.startsWith(`${groupId}-`))` -> `if (!m.clientId.startsWith(groupId))`): caught by mapping > RB6: client.id with the app id but no dash after it falls back [0.23ms]
+P15 (server/real/mapping.ts: `active: sorted(a.active),` -> `active: a.active,`): caught by mapping > RB6: assignment and target are listed in task order [0.23ms]
+P22 (server/real/mapping.ts: ``active=[${sorted(a.active).join(',')}] standby=[${sorted(a.standby).join(',')}]`` -> ``active=[${sorted(a.active).join(',')}]``): caught by events > RB15: member standby changed [0.23ms]
+P23 (server/real/mapping.ts: `configs: g.configs ?? [],` -> `configs: g.configs!,`): caught by mapping > CS5: configs pass through, and an older inspector without configs gives [] [0.26ms]
+B6 (server/real/backend.ts: `this.lastOffsets = null` -> `(deleted)`): caught by RealBackend failures > CS7: a failed poll turns every rate into null, never 0 [47.39ms]
+FMT-null (src/format.ts: `if (rate == null) return '—'` -> `if (rate == null) return '0.0 rec/s'`): caught by format > CS7: an unknown rate is shown as "—", never 0 [0.26ms]
+FMT-10 (src/format.ts: `rate < 10 ?` -> `rate <= 10 ?`): caught by format > CS2: below 10 rec/s one decimal, from 10 rounded with thousands separators [0.19ms]
+FMT-sep (src/format.ts: `Math.round(rate).toLocaleString('en-US')` -> `String(Math.round(rate))`): caught by format > CS2: below 10 rec/s one decimal, from 10 rounded with thousands separators [0.16ms]
+FMT-count (src/format.ts: `n == null ? '—' : n.toLocaleString('en-US')` -> `n == null ? '0' : n.toLocaleString('en-US')`): caught by format > CS9: counts use thousands separators, unknown is "—" [0.22ms]
+FMT-badge (src/format.ts: crashed → sc-badge--idle): caught by format > RB6: state badges follow the design system state language [0.26ms]
+baseline (unmutated): pass

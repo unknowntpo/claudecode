@@ -60,6 +60,14 @@ describe('RealBackend failures', () => {
     await backend.tick({ force: true })
     expect(rate()).toBeNull()
     expect(backend.snapshot().groups[0].flow?.inputRate).toBeNull()
+    // the first good poll after a failure has no previous offsets, so still no rate
+    up = true
+    await Bun.sleep(20)
+    await backend.tick({ force: true })
+    expect(rate()).toBeNull()
+    await Bun.sleep(20)
+    await backend.tick({ force: true })
+    expect(rate()).toBeGreaterThan(0) // positive control: two good polls in a row again
     inspector.stop(true)
   })
 

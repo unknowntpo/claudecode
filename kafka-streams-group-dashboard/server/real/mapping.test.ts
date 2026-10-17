@@ -73,6 +73,20 @@ describe('mapping', () => {
     expect(v.topology.subtopologies.map((s) => s.stores)).toEqual([[], ['counts-store']])
   })
 
+  test('RB6: assignment and target are listed in task order', () => {
+    const m = member({ assignment: parse('1_0,0_1,0_0|1_1,0_0'), targetAssignment: parse('1_1,0_0|1_0,0_1') })
+    const v = toGroupView(group({ members: [m] }), undefined, { joining: [], killed: new Set() }, [])
+    expect(fmt(v.members[0].assignment)).toBe('0_0,0_1,1_0|0_0,1_1')
+    expect(fmt(v.members[0].target)).toBe('0_0,1_1|0_1,1_0')
+  })
+
+  test('CS5: configs pass through, and an older inspector without configs gives []', () => {
+    const ctx = { joining: [], killed: new Set<string>() }
+    const configs = [{ key: 'streams.session.timeout.ms', value: '10000', source: 'group' as const }]
+    expect(toGroupView(group({ configs }), undefined, ctx, []).configs).toEqual(configs) // positive control
+    expect(toGroupView(group(), undefined, ctx, []).configs).toEqual([])
+  })
+
   test('RB6: a started process without a member yet is shown as joining, a listed one is not', () => {
     const v = toGroupView(group(), undefined, { joining: ['process-A', 'process-B'], killed: new Set() }, [])
     expect(v.members.map((m) => [m.processId, m.status])).toEqual([
@@ -104,6 +118,8 @@ function scenario(change: Change): [InspectorGroup | undefined, InspectorGroup] 
       return [prev, group({ targetAssignmentEpoch: 4 })]
     case 'member assignment changed':
       return [{ ...prev, members: [member({ assignment: parse('0_0,0_1|') })] }, prev]
+    case 'member standby changed':
+      return [prev, group({ members: [member({ assignment: parse('0_0|1_0') })] })]
     case 'member epoch bumped':
       return [prev, group({ members: [member({ memberEpoch: 4 })] })]
   }

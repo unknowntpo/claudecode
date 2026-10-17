@@ -198,6 +198,9 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 | RB6 | revoke and receive at once: revoke wins | 0_0\| | 0_1\| | word-count-process-A-StreamThread-1-consumer | no | STABLE | process-A | UNREVOKED_TASKS | 0_0\| | alive | STABLE |
 | RB6 | process label with dashes | \| | \| | word-count-process-B-2-StreamThread-3-consumer | no | STABLE | process-B-2 | STABLE | \| | alive | STABLE |
 | RB6 | foreign client.id falls back to broker processId | \| | \| | someone-else | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
+| RB6 | client.id with the app id but no dash after it falls back | \| | \| | word-countX-process-A-StreamThread-1-consumer | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
+| RB6 | client.id equal to the app id falls back | \| | \| | word-count | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
+| RB6 | no label before -StreamThread: the rest is kept, never empty | \| | \| | word-count--StreamThread-1-consumer | no | STABLE | -StreamThread-1-consumer | STABLE | \| | alive | STABLE |
 | RB6 | process killed by the dashboard | 0_0\| | 0_0\| | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | crashed | STABLE |
 | RB12 | broker state NOT_READY (missing source topics) | \| | \| | word-count-process-A-StreamThread-1-consumer | no | NOT_READY | process-A | STABLE | \| | alive | NOT_READY |
 | RB12 | broker state DEAD | \| | \| | word-count-process-A-StreamThread-1-consumer | no | DEAD | process-A | STABLE | \| | alive | EMPTY |
@@ -217,6 +220,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 | RB15 | group epoch bumped | epoch | group epoch → 4 |
 | RB15 | target assignment epoch bumped | assignor | target assignment epoch 4 |
 | RB15 | member assignment changed | heartbeat | m-1 memberEpoch=3 active=[0_0] |
+| RB15 | member standby changed | heartbeat | m-1 memberEpoch=3 active=[0_0] standby=[1_0] |
 | RB15 | member epoch bumped | heartbeat | m-1 memberEpoch=4 |
 <!-- test-plan:end -->
 
