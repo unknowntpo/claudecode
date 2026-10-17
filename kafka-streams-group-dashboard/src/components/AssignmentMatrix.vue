@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { tasksOf } from '../../shared/pipeline'
-import type { ClientMessage, GroupView, MemberView, TaskId } from '../../shared/types'
+import type { GroupView, MemberView, TaskId } from '../../shared/types'
 import { badgeClass } from '../format'
 import { useI18n } from '../i18n'
 
-const props = defineProps<{ group: GroupView; selected: string | null; send: (msg: ClientMessage) => void }>()
+const props = defineProps<{ group: GroupView; selected: string | null }>()
 const { tr } = useI18n()
 
 /** Members grouped by process (one KafkaStreams instance = one process, one member per StreamThread). */
@@ -30,16 +30,13 @@ function cell(m: MemberView, t: TaskId): Cell {
   return null
 }
 
-/** No live member processes it: a crashed owner does not count (same rule as the drawer, Spec 003 CV3). */
-const unowned = (t: TaskId) =>
-  members.value.some((m) => m.status !== 'joining') &&
-  !props.group.members.some((m) => m.status !== 'crashed' && m.assignment.active.includes(t))
+/** No member owns it right now. */
+const unowned = (t: TaskId) => !props.group.members.some((m) => m.assignment.active.includes(t))
+/** Owned but no progress past the stall threshold (Spec 004 Behavior 4). */
+const stalled = (t: TaskId) => props.group.stalledTasks[t]
 const subtopologyOf = (t: TaskId) => t.split('_')[0]
-/** Placeholders of starting processes share a memberId, so key by process too. */
 const key = (m: MemberView) => `${m.processId}/${m.memberId}`
-const alive = (processId: string) => props.group.members.some((m) => m.processId === processId && m.status !== 'crashed')
 const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
-const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.status)
 </script>
 
 <template>
@@ -51,11 +48,6 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
           <th />
           <th v-for="p in processes" :key="p.processId" :colspan="p.members.length">
             {{ p.processId }}
-            <div v-if="alive(p.processId)" class="actions">
-              <button class="sc-button sc-button--small" :title="tr('action.threadTitle')" @click="send({ type: 'addMember', groupId: group.groupId, processId: p.processId })">{{ tr('action.thread') }}</button>
-              <button class="sc-button sc-button--small" :title="tr('action.stopTitle')" @click="send({ type: 'stopProcess', groupId: group.groupId, processId: p.processId })">{{ tr('action.stop') }}</button>
-              <button class="sc-button sc-button--small sc-button--danger" :title="tr('action.killTitle')" @click="send({ type: 'killProcess', groupId: group.groupId, processId: p.processId })">{{ tr('action.kill') }}</button>
-            </div>
           </th>
         </tr>
         <tr>
@@ -63,13 +55,14 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
           <th v-for="m in members" :key="key(m)" class="sc-member">
             <div class="sc-member__id" :title="m.memberId">{{ shortId(m.memberId) }}</div>
             <div class="sc-member__epoch">epoch {{ m.memberEpoch }}</div>
-            <span :class="badgeClass(memberBadge(m))">{{ m.status === 'alive' ? m.state : tr(m.status === 'crashed' ? 'status.crashed' : 'status.joining') }}</span>
+            <span :class="badgeClass(m.status === 'stalled' ? 'stalled' : m.state)">{{ m.status === 'stalled' ? tr('status.stalled') : m.state }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="(t, i) in tasks" :key="t" :class="{ 'sc-split': i > 0 && subtopologyOf(t) !== subtopologyOf(tasks[i - 1]) }">
-          <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" :title="tr('tasks.unowned')">!</span></th>
+          <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
+            <span v-else-if="stalled(t) !== undefined" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(stalled(t)! / 1000) })">!</span></th>
           <td v-for="m in members" :key="key(m)">
             <span v-if="cell(m, t)" :class="cell(m, t)!.cls" :title="cell(m, t)!.title">{{ cell(m, t)!.label }}</span>
           </td>
@@ -80,6 +73,6 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
 </template>
 
 <style scoped>
-.actions { display: flex; gap: var(--space-1); justify-content: center; margin-top: var(--space-1); }
+.stalled-mark { background: var(--state-revoking); }
 .empty { margin: 0; color: var(--ink-muted); }
 </style>

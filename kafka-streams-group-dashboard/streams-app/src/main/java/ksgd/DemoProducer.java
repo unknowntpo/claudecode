@@ -12,7 +12,8 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
- * Spec 002 Behavior 1: one background loop writing demo records — text-lines 5/s, page-views 5/s,
+ * {@code produce} mode (Spec 004 Behavior 1, the {@code producer} compose service). Spec 002 Behavior 1:
+ * one loop writing demo records — text-lines 5/s, page-views 5/s,
  * orders 3/s, customers 1/s. Errors go to stderr and never stop the loop.
  */
 final class DemoProducer {
@@ -29,7 +30,8 @@ final class DemoProducer {
         this.producer = producer;
     }
 
-    static void start() {
+    /** Produces until the process is killed. */
+    static void run() throws InterruptedException {
         Properties p = new Properties();
         p.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, Main.bootstrap());
         p.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -39,13 +41,14 @@ final class DemoProducer {
         p.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 2000);
         p.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 5000);
         p.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 2000);
-        DemoProducer d = new DemoProducer(new KafkaProducer<>(p));
-        ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "demo-producer");
-            t.setDaemon(true);
-            return t;
-        });
+        KafkaProducer<String, String> producer = new KafkaProducer<>(p);
+        DemoProducer d = new DemoProducer(producer);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> producer.close(java.time.Duration.ofSeconds(2))));
+        ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "demo-producer"));
         exec.scheduleAtFixedRate(d::step, 0, TICK_MS, TimeUnit.MILLISECONDS);
+        System.out.println("producing to " + Main.bootstrap());
+        System.out.flush();
+        Thread.currentThread().join(); // until killed
     }
 
     private void step() {

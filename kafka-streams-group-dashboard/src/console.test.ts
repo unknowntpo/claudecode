@@ -1,7 +1,7 @@
 // Spec 003 (docs/specs/003-console-v2/spec.md): CV1–CV10 as pure functions over GroupView.
 import { describe, expect, test } from 'bun:test'
 import type { GroupState, GroupView, MemberView } from '../shared/types'
-import { drawerSubtopology, isBehind, maxLag, processCards, sortGroups, taskRows } from './console'
+import { drawerSubtopology, fencedCards, isBehind, maxLag, processCards, sortGroups, taskRows } from './console'
 import { testPlanRows as consoleRows } from './console.cases'
 import { testPlanRows as detailRows } from './detail.cases'
 import { DICTIONARIES, detectLang, PROTECTED_TERMS, t } from './i18n'
@@ -23,15 +23,13 @@ function member(spec: string): MemberView {
     assignment: { active: list('a'), standby: list('s') },
     pendingRevocation: { active: list('r'), standby: [] },
     target: { active: [...list('a').filter((x: string) => !list('r').includes(x)), ...list('t')], standby: kv.ts ? list('ts') : list('s') },
-    msSinceHeartbeat: kv.ms ? Number(kv.ms) : 0,
+    stalledMs: status === 'stalled' ? Number(kv.ms ?? 0) : null,
   }
 }
 
 function view(over: Partial<GroupView> = {}): GroupView {
   return {
     groupId: 'g',
-    description: '',
-    dsl: '',
     state: 'STABLE',
     groupEpoch: 1,
     targetAssignmentEpoch: 1,
@@ -42,8 +40,18 @@ function view(over: Partial<GroupView> = {}): GroupView {
     events: [],
     flow: null,
     configs: [],
+    stalledTasks: {},
+    stallThresholdMs: 5000,
+    fenced: [],
     ...over,
   }
+}
+
+/** The group a member list describes: stalled members' active tasks are its stalled tasks. */
+function groupOf(ms: MemberView[], over: Partial<GroupView> = {}): GroupView {
+  const stalledTasks: Record<string, number> = {}
+  for (const m of ms) if (m.status === 'stalled') for (const t of m.assignment.active) stalledTasks[t] = m.stalledMs ?? 0
+  return view({ members: ms, stalledTasks, ...over })
 }
 
 const members = (s: string) => (s ? s.split(' | ').map(member) : [])
@@ -53,8 +61,8 @@ describe('order and behind', () => {
     if (row.id === 'CV1') {
       const groups = row.groups
         ? row.groups.split(' ').map((g) => {
-            const [groupId, state, crashed] = g.split(':')
-            return view({ groupId, state: state as GroupState, members: crashed ? [member('B/m crashed')] : [] })
+            const [groupId, state, stalled] = g.split(':')
+            return groupOf(stalled ? [member('B/m stalled a=0_0 ms=6000')] : [], { groupId, state: state as GroupState })
           })
         : []
       expect(sortGroups(groups).map((g) => g.groupId).join(' ')).toBe(row.expected)
@@ -70,20 +78,21 @@ describe('order and behind', () => {
 const fmtRow = (r: ReturnType<typeof taskRows>[number]) =>
   [
     r.task,
-    `A:${r.move ?? (r.active.length ? r.active.map((a) => a.processId + (a.crashed ? '×' : '')).join(',') : '—')}`,
-    ...(r.standby.length ? [`S:${r.standby.map((s) => s.processId + (s.crashed ? '×' : '')).join(',')}`] : []),
+    `A:${r.move ?? (r.active.length ? r.active.join(',') : '—')}`,
+    ...(r.standby.length ? [`S:${r.standby.join(',')}`] : []),
     ...(r.unowned ? ['!'] : []),
+    ...(r.stalledMs !== null ? ['stalled'] : []),
   ].join(' ')
 
 const fmtCard = (c: ReturnType<typeof processCards>[number]) =>
   [
-    `${c.processId} ${c.status}${c.silentMs ? ` ${Math.round(c.silentMs / 1000)}s` : ''}`,
+    `${c.processId} ${c.status}${c.stalledMs ? ` ${Math.round(c.stalledMs / 1000)}s` : ''}`,
     ...c.threads.map((th) => `[${th.memberId}: ${th.tasks.map((x) => x.task + (x.role === 'active' ? 'A' : 'S')).join(' ')}]`),
   ].join(' ')
 
 describe('drawer and processes', () => {
   test.each(detailRows)('$id: $case', (row) => {
-    const g = view({ members: members(row.members) })
+    const g = groupOf(members(row.members))
     if (row.id === 'CV3') {
       const rows = taskRows(g, row.subtopology)
       expect(rows.every((r) => r.task.startsWith(`${row.subtopology}_`))).toBe(true)
@@ -92,6 +101,16 @@ describe('drawer and processes', () => {
     } else {
       expect(processCards(g).map(fmtCard).join(' | ')).toBe(row.expected)
     }
+  })
+})
+
+describe('fenced', () => {
+  test('RO11: a fenced card lists its tasks in order with their new owners', () => {
+    const g = groupOf([member('A/m1 alive a=0_3')], { fenced: [{ processId: 'B', fencedAt: 1, stalledMs: 9000, tasks: ['0_4', '0_3'] }] })
+    expect(fencedCards(g)).toEqual([
+      { processId: 'B', stalledMs: 9000, fencedAt: 1, tasks: [{ task: '0_3', nowOwnedBy: 'A' }, { task: '0_4', nowOwnedBy: null }] },
+    ])
+    expect(fencedCards(view())).toEqual([]) // positive control: nothing fenced
   })
 })
 
@@ -104,12 +123,12 @@ describe('i18n', () => {
   })
 
   test('CV5: placeholders are filled in both languages', () => {
-    expect(t('en', 'metric.crashed', { n: 2 })).toBe('2 crashed')
+    expect(t('en', 'metric.stalled', { n: 2 })).toBe('2 stalled')
     expect(t('zh-Hant', 'metric.processCount', { n: 3 })).toBe('3 個 process')
   })
 
   test('CV5: a placeholder without a value stays visible as {name}', () => {
-    expect(t('en', 'metric.crashed', {})).toBe('{n} crashed')
+    expect(t('en', 'metric.stalled', {})).toBe('{n} stalled')
   })
 
   test('CV2: largest lag is null while every lag is unknown, not 0', () => {

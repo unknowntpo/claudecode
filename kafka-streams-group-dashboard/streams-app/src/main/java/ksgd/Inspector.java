@@ -30,41 +30,24 @@ import org.apache.kafka.clients.admin.ListStreamsGroupOffsetsSpec;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.GroupListing;
+import org.apache.kafka.clients.admin.ListGroupsOptions;
 import org.apache.kafka.clients.admin.StreamsGroupDescription;
 import org.apache.kafka.clients.admin.StreamsGroupMemberAssignment;
 import org.apache.kafka.clients.admin.StreamsGroupMemberDescription;
 import org.apache.kafka.clients.admin.StreamsGroupSubtopologyDescription;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.common.GroupState;
+import org.apache.kafka.common.GroupType;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.GroupIdNotFoundException;
-import org.apache.kafka.common.errors.TopicExistsException;
 
-/** {@code inspect} mode: HTTP wrapper around the Admin streams-group API. */
+/**
+ * {@code inspect} mode: read-only HTTP wrapper around the Admin streams-group API (Spec 004 Behavior 2, 4a).
+ * It never produces, creates topics or sets configs, except the standby replicas a caller POSTs.
+ */
 final class Inspector {
     static final String STANDBY_KEY = "streams.num.standby.replicas";
-    static final List<String> GROUPS = List.of("word-count", "order-enrichment", "page-view-sessions");
-    /** The broker-level group.streams.* defaults are not applied to new groups, so set them per group. */
-    static final Map<String, String> GROUP_CONFIGS = Map.of(
-            "streams.session.timeout.ms", "10000",
-            "streams.heartbeat.interval.ms", "2000");
-    static final Map<String, Integer> TOPICS = new LinkedHashMap<>();
-    static {
-        TOPICS.put("text-lines", 4);
-        TOPICS.put("orders", 3);
-        TOPICS.put("customers", 3);
-        TOPICS.put("page-views", 6);
-        // Spec 002: sink topics, 1 partition
-        TOPICS.put("word-counts", 1);
-        TOPICS.put("enriched-orders", 1);
-        TOPICS.put("user-sessions", 1);
-    }
-    /** Spec 002: sink topics per app (static; the streams group description has no sinks). */
-    static final Map<String, List<String>> SINKS = Map.of(
-            "word-count", List.of("word-counts"),
-            "order-enrichment", List.of("enriched-orders"),
-            "page-view-sessions", List.of("user-sessions"));
     /** Spec 002: group configs reported in {@code configs}, in this order. */
     static final List<String> CONFIG_KEYS = List.of(
             "streams.session.timeout.ms", "streams.heartbeat.interval.ms", STANDBY_KEY);
@@ -83,9 +66,6 @@ final class Inspector {
         p.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 3000);
         p.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 2000);
         Admin admin = Admin.create(p);
-        createTopics(admin);
-        configureGroups(admin);
-        DemoProducer.start();
         Inspector inspector = new Inspector(admin);
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -95,25 +75,6 @@ final class Inspector {
 
         System.out.println("READY " + port);
         System.out.flush();
-    }
-
-    static void createTopics(Admin admin) throws Exception {
-        for (var e : TOPICS.entrySet()) {
-            try {
-                admin.createTopics(List.of(new NewTopic(e.getKey(), e.getValue(), (short) 1))).all().get();
-            } catch (ExecutionException ex) {
-                if (!(ex.getCause() instanceof TopicExistsException)) throw ex;
-            }
-        }
-    }
-
-    static void configureGroups(Admin admin) throws Exception {
-        List<AlterConfigOp> ops = GROUP_CONFIGS.entrySet().stream()
-                .map(e -> new AlterConfigOp(new ConfigEntry(e.getKey(), e.getValue()), AlterConfigOp.OpType.SET))
-                .toList();
-        Map<ConfigResource, Collection<AlterConfigOp>> alter = new LinkedHashMap<>();
-        for (String g : GROUPS) alter.put(new ConfigResource(ConfigResource.Type.GROUP, g), ops);
-        admin.incrementalAlterConfigs(alter).all().get();
     }
 
     // ---- HTTP ----
@@ -126,6 +87,7 @@ final class Inspector {
             if (method.equals("GET") && (path.equals("/groups") || path.equals("/groups/"))) {
                 List<String> ids = Arrays.stream(q.getOrDefault("ids", "").split(","))
                         .map(String::trim).filter(s -> !s.isEmpty()).toList();
+                if (ids.isEmpty()) ids = listStreamsGroups();
                 send(ex, 200, JSON.writeValueAsBytes(Map.of("groups", describe(ids))));
             } else if (method.equals("POST") && path.matches("/groups/[^/]+/standby")) {
                 String id = path.split("/")[2];
@@ -174,6 +136,16 @@ final class Inspector {
 
     // ---- Admin → contract JSON ----
 
+    /** Every streams group the broker has (Spec 004 Behavior 2), sorted by id. */
+    List<String> listStreamsGroups() throws Exception {
+        var options = new ListGroupsOptions().withTypes(Set.of(GroupType.STREAMS));
+        return admin.listGroups(options).all().get().stream()
+                .filter(g -> g.type().map(t -> t == GroupType.STREAMS).orElse(false))
+                .map(GroupListing::groupId)
+                .sorted()
+                .toList();
+    }
+
     /**
      * Describes the groups with a fixed number of batched Admin calls, whatever the number of groups:
      * describeStreamsGroups, listStreamsGroupOffsets and describeConfigs in parallel, then describeTopics,
@@ -203,7 +175,7 @@ final class Inspector {
             // an unknown group is reported either as GroupIdNotFound or as a DEAD placeholder with epoch -1
             if (d != null && d.groupState() == GroupState.DEAD) d = null;
             descs.put(id, d);
-            List<String[]> topics = groupTopics(id, d);
+            List<String[]> topics = groupTopics(d);
             topicsByGroup.put(id, topics);
             for (String[] t : topics) allTopics.add(t[0]);
             if (d != null) for (var s : d.subtopologies()) allTopics.addAll(s.repartitionSourceTopics().keySet());
@@ -219,7 +191,7 @@ final class Inspector {
                 // not created yet
             }
         }
-        Map<String, Long> endOffsets = endOffsets(partitions);
+        Map<String, Map<Integer, Long>> endByPartition = endOffsets(partitions);
         Map<ConfigResource, Config> configs = configsF.get();
 
         List<Object> out = new ArrayList<>();
@@ -240,20 +212,32 @@ final class Inspector {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("name", t[0]);
                 m.put("kind", t[1]);
-                Long end = endOffsets.get(t[0]);
-                if (end != null) m.put("endOffset", end);
+                Map<Integer, Long> end = endByPartition.get(t[0]);
+                if (end != null) m.put("endOffset", end.values().stream().mapToLong(Long::longValue).sum());
                 topics.add(m);
             }
             g.put("topics", topics);
-            g.put("committed", committed(committedF, id, topicsByGroup.get(id)));
+            Map<String, Map<Integer, Long>> committedByPartition = committedOffsets(committedF, id, topicsByGroup.get(id));
+            Map<String, Long> committed = new TreeMap<>();
+            committedByPartition.forEach((t, ps) ->
+                    committed.put(t, ps.values().stream().mapToLong(Long::longValue).sum()));
+            g.put("committed", committed);
             g.put("configs", configs(config));
+            // Spec 004 Behavior 4a: per-partition offsets, for per-task progress (stalled detection)
+            Map<String, Map<Integer, Long>> groupEnd = new LinkedHashMap<>();
+            for (String[] t : topicsByGroup.get(id)) {
+                Map<Integer, Long> end = endByPartition.get(t[0]);
+                if (end != null) groupEnd.put(t[0], end);
+            }
+            g.put("endOffsets", groupEnd);
+            g.put("committedOffsets", committedByPartition);
             out.add(g);
         }
         return out;
     }
 
-    /** {name, kind} in order source, repartition, changelog, sink; deduplicated by name. */
-    private static List<String[]> groupTopics(String groupId, StreamsGroupDescription d) {
+    /** {name, kind} in order source, repartition, changelog; deduplicated by name. No sinks: the broker does not know them. */
+    private static List<String[]> groupTopics(StreamsGroupDescription d) {
         Map<String, String> kinds = new LinkedHashMap<>();
         if (d != null) {
             for (var s : d.subtopologies()) for (String t : s.sourceTopics()) kinds.putIfAbsent(t, "source");
@@ -264,39 +248,38 @@ final class Inspector {
             for (var s : d.subtopologies())
                 for (String t : s.stateChangelogTopics().keySet()) kinds.putIfAbsent(t, "changelog");
         }
-        for (String t : SINKS.getOrDefault(groupId, List.of())) kinds.putIfAbsent(t, "sink");
         List<String[]> out = new ArrayList<>();
         kinds.forEach((name, kind) -> out.add(new String[] {name, kind}));
         return out;
     }
 
-    /** Sum of latest offsets per topic, one listOffsets call for all partitions. */
-    private Map<String, Long> endOffsets(Map<String, Integer> partitions) throws Exception {
+    /** Latest offset per partition per topic, one listOffsets call for all partitions. */
+    private Map<String, Map<Integer, Long>> endOffsets(Map<String, Integer> partitions) throws Exception {
         Map<TopicPartition, OffsetSpec> req = new LinkedHashMap<>();
         partitions.forEach((t, n) -> {
             for (int p = 0; p < n; p++) req.put(new TopicPartition(t, p), OffsetSpec.latest());
         });
-        Map<String, Long> sums = new LinkedHashMap<>();
-        if (req.isEmpty()) return sums;
+        Map<String, Map<Integer, Long>> out = new LinkedHashMap<>();
+        if (req.isEmpty()) return out;
         var result = admin.listOffsets(req);
         // A partition that vanished between describeTopics and listOffsets drops the whole topic
         // (endOffset absent, Spec 002 Behavior 2), whatever order its partitions come in.
-        java.util.Set<String> failed = new java.util.HashSet<>();
+        Set<String> failed = new HashSet<>();
         for (TopicPartition tp : req.keySet()) {
             try {
                 long off = result.partitionResult(tp).get().offset();
-                sums.merge(tp.topic(), off, Long::sum);
+                out.computeIfAbsent(tp.topic(), k -> new TreeMap<>()).put(tp.partition(), off);
             } catch (ExecutionException e) {
                 failed.add(tp.topic());
             }
         }
-        sums.keySet().removeAll(failed);
-        return sums;
+        out.keySet().removeAll(failed);
+        return out;
     }
 
-    /** Committed offsets summed per topic, for the group's source and repartition topics only. */
-    private static Map<String, Long> committed(ListStreamsGroupOffsetsResult r, String groupId, List<String[]> topics)
-            throws Exception {
+    /** Committed offset per partition per topic, for the group's source and repartition topics only. */
+    private static Map<String, Map<Integer, Long>> committedOffsets(ListStreamsGroupOffsetsResult r, String groupId,
+                                                                   List<String[]> topics) throws Exception {
         Set<String> wanted = new HashSet<>();
         for (String[] t : topics) if (t[1].equals("source") || t[1].equals("repartition")) wanted.add(t[0]);
         Map<TopicPartition, OffsetAndMetadata> offsets;
@@ -306,10 +289,10 @@ final class Inspector {
             if (e.getCause() instanceof GroupIdNotFoundException) return Map.of();
             throw e;
         }
-        Map<String, Long> out = new TreeMap<>();
+        Map<String, Map<Integer, Long>> out = new TreeMap<>();
         for (var e : offsets.entrySet()) {
             if (e.getValue() == null || !wanted.contains(e.getKey().topic())) continue;
-            out.merge(e.getKey().topic(), e.getValue().offset(), Long::sum);
+            out.computeIfAbsent(e.getKey().topic(), k -> new TreeMap<>()).put(e.getKey().partition(), e.getValue().offset());
         }
         return out;
     }

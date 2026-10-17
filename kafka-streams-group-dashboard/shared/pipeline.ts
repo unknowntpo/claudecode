@@ -45,3 +45,10 @@ export function layoutText({ sources, steps }: PipelineLayout): string {
 export function tasksOf(tasks: string[], subtopologyId: string | null): string[] {
   return subtopologyId === null ? tasks : tasks.filter((t) => t.split('_')[0] === subtopologyId)
 }
+
+/** Task id order: by subtopology, then partition ("1_10" after "1_2"). */
+export function compareTaskIds(a: string, b: string): number {
+  const [sa, pa] = a.split('_').map(Number)
+  const [sb, pb] = b.split('_').map(Number)
+  return sa - sb || pa - pb
+}

@@ -10,17 +10,16 @@ const emit = defineEmits<{ select: [id: string | null] }>()
 const { tr } = useI18n()
 
 const subs = computed(() => props.group.topology.subtopologies)
-const sinks = computed(() => props.group.flow?.topics.filter((t) => t.kind === 'sink').map((t) => t.name) ?? [])
-const layout = computed(() => pipelineLayout(subs.value, sinks.value))
+// the broker does not know sink topics (Spec 004), so the graph ends at the last subtopology
+const layout = computed(() => pipelineLayout(subs.value, []))
 const sub = (id: string) => subs.value.find((s) => s.id === id)!
 const rate = (topic: string) => props.group.flow?.topics.find((t) => t.name === topic)?.rate ?? null
 const edgeRate = (topics: string[]) => {
   const rates = topics.map(rate)
   return rates.length && rates.every((r) => r !== null) ? rates.reduce((a, b) => a! + b!, 0) : null
 }
-const isRepartition = (topics: string[]) => topics.length > 0 && topics.every((t) => !sinks.value.includes(t))
-/** Tasks a live member is processing; a crashed owner does not count (Spec 003 CV3). */
-const owned = computed(() => new Set(props.group.members.filter((m) => m.status !== 'crashed').flatMap((m) => m.assignment.active)))
+/** Tasks some member owns; an owned task without progress is marked stalled instead (Spec 004). */
+const owned = computed(() => new Set(props.group.members.flatMap((m) => m.assignment.active)))
 const toggle = (id: string) => emit('select', props.selected === id ? null : id)
 </script>
 
@@ -55,26 +54,17 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
             <i
               v-for="t in tasksOf(group.tasks, step.id)"
               :key="t"
-              :class="{ 'sc-unowned-cell': !owned.has(t) }"
-              :title="owned.has(t) ? t : `${t} — ${tr('tasks.unowned')}`"
+              :class="{ 'sc-unowned-cell': !owned.has(t), stalled: owned.has(t) && group.stalledTasks[t] !== undefined }"
+              :title="!owned.has(t) ? `${t} — ${tr('tasks.unowned')}` : group.stalledTasks[t] !== undefined ? `${t} — ${tr('tasks.stalled', { s: Math.round(group.stalledTasks[t] / 1000) })}` : t"
             />
           </div>
           <div v-for="(store, k) in sub(step.id).stores" :key="store" class="sc-node__store">
             ↻ {{ store }}<small>{{ sub(step.id).stateChangelogTopics[k] }}</small>
           </div>
         </div>
-        <span
-          v-if="step.out.length"
-          class="sc-edge"
-          :class="{ 'sc-edge--repartition': isRepartition(step.out) && i < layout.steps.length - 1 }"
-        >
-          <span class="sc-edge__label">
-            <template v-if="i < layout.steps.length - 1">{{ step.out.join(', ') }} · </template>{{ formatRate(edgeRate(step.out)) }}
-          </span>
+        <span v-if="i < layout.steps.length - 1" class="sc-edge sc-edge--repartition">
+          <span class="sc-edge__label">{{ step.out.join(', ') }} · {{ formatRate(edgeRate(step.out)) }}</span>
         </span>
-        <div v-if="i === layout.steps.length - 1 && step.out.length" class="topics">
-          <span v-for="t in step.out" :key="t" class="sc-topic">{{ t }}<small>{{ tr('pipeline.sink') }}</small></span>
-        </div>
       </template>
     </div>
   </section>
@@ -84,4 +74,5 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
 .topics { display: flex; flex-direction: column; gap: var(--space-2); align-self: center; }
 .sc-topic small { display: block; color: var(--ink-muted); font-size: 11px; }
 .empty { margin: 0; color: var(--ink-muted); }
+.sc-node__tasks i.stalled { background: var(--state-revoking); }
 </style>

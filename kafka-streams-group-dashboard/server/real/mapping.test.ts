@@ -3,7 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import type { Change } from './events.cases'
 import { testPlanRows as eventRows } from './events.cases'
 import { testPlanRows as mappingRows } from './mapping.cases'
-import { diffEvents, type InspectorAssignment, type InspectorGroup, type InspectorMember, toGroupView } from './mapping'
+import { diffEvents, type InspectorAssignment, type InspectorGroup, type InspectorMember, taskSamples, toGroupView } from './mapping'
+
+const quiet = { stalledTasks: {}, thresholdMs: 5000, fenced: [] }
 
 /** "0_0,0_1|1_0" → active [0_0, 0_1], standby [1_0] */
 const parse = (s: string): InspectorAssignment => {
@@ -57,8 +59,7 @@ describe('mapping', () => {
       state: row.brokerState,
       members: [member({ clientId: row.clientId, assignment: parse(row.assignment), targetAssignment: parse(row.target) })],
     })
-    const killed = new Set(row.killed ? ['process-A'] : [])
-    const view = toGroupView(g, undefined, { joining: [], killed }, [])
+    const view = toGroupView(g, { ...quiet, stalledTasks: row.stalled ? { '0_0': 6000 } : {} }, [])
     const m = view.members[0]
     expect(m.processId).toBe(row.expectedLabel)
     expect(m.state).toBe(row.expectedMemberState)
@@ -68,30 +69,41 @@ describe('mapping', () => {
   })
 
   test('RB6: topology, task ids and stores come from the broker subtopologies', () => {
-    const v = toGroupView(group(), undefined, { joining: [], killed: new Set() }, [])
+    const v = toGroupView(group(), quiet, [])
     expect(v.tasks).toEqual(['0_0', '0_1', '1_0', '1_1'])
     expect(v.topology.subtopologies.map((s) => s.stores)).toEqual([[], ['counts-store']])
   })
 
   test('RB6: assignment and target are listed in task order', () => {
     const m = member({ assignment: parse('1_0,0_1,0_0|1_1,0_0'), targetAssignment: parse('1_1,0_0|1_0,0_1') })
-    const v = toGroupView(group({ members: [m] }), undefined, { joining: [], killed: new Set() }, [])
+    const v = toGroupView(group({ members: [m] }), quiet, [])
     expect(fmt(v.members[0].assignment)).toBe('0_0,0_1,1_0|0_0,1_1')
     expect(fmt(v.members[0].target)).toBe('0_0,1_1|0_1,1_0')
   })
 
   test('CS5: configs pass through, and an older inspector without configs gives []', () => {
-    const ctx = { joining: [], killed: new Set<string>() }
     const configs = [{ key: 'streams.session.timeout.ms', value: '10000', source: 'group' as const }]
-    expect(toGroupView(group({ configs }), undefined, ctx, []).configs).toEqual(configs) // positive control
-    expect(toGroupView(group(), undefined, ctx, []).configs).toEqual([])
+    expect(toGroupView(group({ configs }), quiet, []).configs).toEqual(configs) // positive control
+    expect(toGroupView(group(), quiet, []).configs).toEqual([])
   })
 
-  test('RB6: a started process without a member yet is shown as joining, a listed one is not', () => {
-    const v = toGroupView(group(), undefined, { joining: ['process-A', 'process-B'], killed: new Set() }, [])
-    expect(v.members.map((m) => [m.processId, m.status])).toEqual([
-      ['process-A', 'alive'],
-      ['process-B', 'joining'],
+  test("RO4: stalled ms is the longest stall among the member's active tasks", () => {
+    const m = member({ assignment: parse('0_0,0_1|'), targetAssignment: parse('0_0,0_1|') })
+    const v = toGroupView(group({ members: [m] }), { ...quiet, stalledTasks: { '0_0': 6000, '0_1': 9000, '1_0': 99000 } }, [])
+    expect(v.members[0].stalledMs).toBe(9000)
+    expect(toGroupView(group({ members: [m] }), quiet, []).members[0].stalledMs).toBeNull() // positive control
+  })
+
+  test('RO4: task samples sum the input partitions of each task', () => {
+    const g = group({
+      endOffsets: { 'text-lines': { '0': 10, '1': 20 }, 'word-count-counts-store-repartition': { '0': 5, '1': 7 } },
+      committedOffsets: { 'text-lines': { '0': 9 }, 'word-count-counts-store-repartition': { '0': 5, '1': 6 } },
+    })
+    expect(taskSamples(g)).toEqual([
+      { task: '1_0', committed: 5, end: 5, owner: null },
+      { task: '1_1', committed: 6, end: 7, owner: null },
+      { task: '0_0', committed: 9, end: 10, owner: 'm-1' },
+      { task: '0_1', committed: null, end: 20, owner: null },
     ])
   })
 })

@@ -1,0 +1,90 @@
+$ E2E=1 bun test e2e
+bun test v1.3.13 (bf2e2cec)
+READY 18085
+
+e2e/real-broker.test.ts:
+RB13 measured: STABLE 2298 ms after the second member joined
+RO5 measured: stalled 2722 ms after docker kill (threshold 5000 ms)
+125 |     await waitFor('lag known', (g) => g.flow?.lag['0'] != null, 15_000)
+126 |     const before = view()!.flow!.lag['0']!
+127 |     await Bun.$`docker kill ${container(2)}`.quiet()
+128 |     const stalledAfter = await waitFor('word-count-2 stalled', (g) => g.members.some((m) => m.processId === 'word-count-2' && m.status === 'stalled'), 10_000)
+129 |     console.log(`RO5 measured: stalled ${stalledAfter} ms after docker kill (threshold ${view()!.stallThresholdMs} ms)`)
+130 |     expect(view()!.flow!.lag['0']!).toBeGreaterThan(before)
+                                          ^
+error: expect(received).toBeGreaterThan(expected)
+
+Expected: > 3
+Received: 2
+
+      at <anonymous> (/Users/unknowntpo/repo/unknowntpo/claudecode/.claude/worktrees/zealous-hamilton/kafka-streams-group-dashboard/e2e/real-broker.test.ts:130:37)
+(fail) real broker + compose demo > RO5: a killed instance is stalled within 10 s, then fenced; CS8: its lag grows [15770.73ms]
+RO6 measured: left 28 ms after docker stop
+137 |   test('RO6: a stopped instance leaves at once, without stalling or a fenced card', async () => {
+138 |     await instances(2)
+139 |     await Bun.$`docker stop ${container(2)}`.quiet()
+140 |     const ms = await waitFor('word-count-2 left', (g) => !labels(g).includes('word-count-2'), 9_000)
+141 |     console.log(`RO6 measured: left ${ms} ms after docker stop`)
+142 |     expect(view()!.fenced).toEqual([])
+                                 ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   {
++     "fencedAt": 1792265066722,
++     "processId": "word-count-1",
++     "stalledMs": 31237,
++     "tasks": [
++       "0_0",
++       "0_1",
++       "1_1",
++       "1_2",
++       "0_2",
++       "0_3",
++       "1_0",
++       "1_3",
++     ],
++   },
++   {
++     "fencedAt": 1792265098295,
++     "processId": "word-count-2",
++     "stalledMs": 64907,
++     "tasks": [
++       "0_2",
++       "0_3",
++       "1_0",
++       "1_3",
++     ],
++   },
++ ]
+
+- Expected  - 1
++ Received  + 28
+
+      at <anonymous> (/Users/unknowntpo/repo/unknowntpo/claudecode/.claude/worktrees/zealous-hamilton/kafka-streams-group-dashboard/e2e/real-broker.test.ts:142:28)
+(fail) real broker + compose demo > RO6: a stopped instance leaves at once, without stalling or a fenced card [7335.51ms]
+CS6 measured: flow seen in 1317 ms
+CS11 / RO9 measured: slowest 36.1 ms of 20
+org.apache.kafka.common.KafkaException: Failed to find brokers to send ListGroups
+	at org.apache.kafka.clients.admin.KafkaAdminClient$22.handleFailure(KafkaAdminClient.java:3566)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$Call.handleTimeoutFailure(KafkaAdminClient.java:959)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$Call.fail(KafkaAdminClient.java:925)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$TimeoutProcessor.handleTimeouts(KafkaAdminClient.java:1051)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.timeoutPendingCalls(KafkaAdminClient.java:1129)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.processRequests(KafkaAdminClient.java:1495)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.run(KafkaAdminClient.java:1459)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: findAllBrokers
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id order-enrichment is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id page-view-sessions is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+
+ 11 pass
+ 2 fail
+ 44 expect() calls
+Ran 13 tests across 1 file. [133.33s]
+error: script "test:e2e" exited with code 1

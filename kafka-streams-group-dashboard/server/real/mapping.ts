@@ -1,10 +1,12 @@
 // Pure mapping from the inspector's StreamsGroupDescribe JSON (see docs/specs/001-real-broker/spec.md)
 // to the dashboard's GroupView, plus event derivation by diffing two consecutive polls.
 
-import type { Assignment, ConfigEntry, GroupFlow, GroupState, GroupView, LogEvent, MemberState, MemberView, TaskId } from '../../shared/types'
-import { compareTaskIds } from '../assignor'
-import type { AppInfo } from '../topologies'
+import { compareTaskIds } from '../../shared/pipeline'
+import type {
+  Assignment, ConfigEntry, FencedProcess, GroupFlow, GroupState, GroupView, LogEvent, MemberState, MemberView, TaskId,
+} from '../../shared/types'
 import type { InspectorTopic } from './flow'
+import type { TaskSample } from './progress'
 
 export interface InspectorAssignment {
   active: TaskId[]
@@ -43,27 +45,57 @@ export interface InspectorGroup {
   topics?: InspectorTopic[]
   committed?: Record<string, number>
   configs?: ConfigEntry[]
+  /** Spec 004 Behavior 4a: per partition. */
+  endOffsets?: Record<string, Record<string, number>>
+  committedOffsets?: Record<string, Record<string, number>>
 }
 
 export type GroupEvent = Pick<LogEvent, 'kind' | 'message'>
 
-/** Context the Bun server knows about the processes it started. */
-export interface ProcessContext {
-  /** Labels of processes that were started but have no member in the group yet. */
-  joining: string[]
-  /** Labels of processes that were SIGKILLed but are still listed by the broker. */
-  killed: Set<string>
-  /** When each killed process was killed (Spec 003 CV12); the broker does not report heartbeats. */
-  killedAt?: Map<string, number>
-  now?: number
+/** What the backend derived from progress between polls (Spec 004 Behavior 4). */
+export interface ProgressContext {
+  stalledTasks: Record<TaskId, number>
+  thresholdMs: number
+  fenced: FencedProcess[]
 }
 
-/** `word-count-process-A-StreamThread-1-consumer` → `process-A`; falls back to the broker's processId. */
+/** One sample per task: its input is partition p of the subtopology's source and repartition topics. */
+export function taskSamples(g: InspectorGroup): TaskSample[] {
+  const sum = (offsets: Record<string, Record<string, number>> | undefined, topics: string[], p: number) => {
+    let total = 0
+    for (const t of topics) {
+      const v = offsets?.[t]?.[String(p)]
+      if (v === undefined) return null
+      total += v
+    }
+    return topics.length ? total : null
+  }
+  return g.subtopologies.flatMap((s) => {
+    const inputs = [...s.sourceTopics, ...s.repartitionSourceTopics]
+    return Array.from({ length: s.partitions }, (_, p) => {
+      const task = `${s.id}_${p}`
+      return {
+        task,
+        committed: sum(g.committedOffsets, inputs, p),
+        end: sum(g.endOffsets, inputs, p),
+        owner: g.members.find((m) => m.assignment.active.includes(task))?.memberId ?? null,
+      }
+    })
+  })
+}
+
+/**
+ * `word-count-process-A-StreamThread-1-consumer` → `process-A`; falls back to the broker's processId.
+ * A container label that repeats the app id (`word-count-<compose project>-word-count-1`) is cut to its last
+ * `<app id>-…` part, `word-count-1` (Spec 004 Behavior 5).
+ */
 export function processLabel(groupId: string, m: Pick<InspectorMember, 'clientId' | 'processId'>): string {
   if (!m.clientId.startsWith(`${groupId}-`)) return m.processId
   const rest = m.clientId.slice(groupId.length + 1)
   const i = rest.indexOf('-StreamThread')
-  return i > 0 ? rest.slice(0, i) : rest
+  const label = i > 0 ? rest.slice(0, i) : rest
+  const last = label.lastIndexOf(`${groupId}-`)
+  return last > 0 && label[last - 1] === '-' ? label.slice(last) : label
 }
 
 const minus = (a: TaskId[], b: TaskId[]) => a.filter((t) => !b.includes(t))
@@ -86,22 +118,16 @@ export function memberState(m: InspectorMember): MemberState {
 
 const KNOWN_STATES: GroupState[] = ['EMPTY', 'NOT_READY', 'ASSIGNING', 'RECONCILING', 'STABLE']
 
-export function toGroupView(
-  g: InspectorGroup,
-  info: AppInfo | undefined,
-  ctx: ProcessContext,
-  events: LogEvent[],
-  flow: GroupFlow | null = null,
-): GroupView {
+export function toGroupView(g: InspectorGroup, ctx: ProgressContext, events: LogEvent[], flow: GroupFlow | null = null): GroupView {
   const members: MemberView[] = g.members.map((m) => {
-    const label = processLabel(g.groupId, m)
+    const stalled = m.assignment.active.map((t) => ctx.stalledTasks[t]).filter((ms): ms is number => ms !== undefined)
     return {
       memberId: m.memberId,
-      processId: label,
+      processId: processLabel(g.groupId, m),
       clientId: m.clientId,
       memberEpoch: m.memberEpoch,
       state: memberState(m),
-      status: ctx.killed.has(label) ? 'crashed' : 'alive',
+      status: stalled.length ? 'stalled' : 'alive',
       assignment: toAssignment(m.assignment),
       pendingRevocation: {
         active: minus(m.assignment.active, m.targetAssignment.active),
@@ -109,38 +135,19 @@ export function toGroupView(
         warmup: minus(m.assignment.warmup, m.targetAssignment.warmup),
       },
       target: toAssignment(m.targetAssignment),
-      msSinceHeartbeat: ctx.killedAt?.has(label) ? Math.max(0, (ctx.now ?? Date.now()) - ctx.killedAt.get(label)!) : 0,
+      stalledMs: stalled.length ? Math.max(...stalled) : null,
     }
   })
-  const present = new Set(members.map((m) => m.processId))
-  for (const label of ctx.joining.filter((l) => !present.has(l))) {
-    const none = { active: [], standby: [] }
-    members.push({
-      memberId: '(starting)',
-      processId: label,
-      clientId: `${g.groupId}-${label}`,
-      memberEpoch: 0,
-      state: 'STABLE',
-      status: 'joining',
-      assignment: none,
-      pendingRevocation: none,
-      target: none,
-      msSinceHeartbeat: 0,
-    })
-  }
   members.sort((a, b) => a.processId.localeCompare(b.processId) || a.clientId.localeCompare(b.clientId))
 
   const subtopologies = g.subtopologies.map((s) => ({
     id: s.id,
-    // the app's own name for the subtopology when the ids match its static description
-    name:
-      info?.topology.subtopologies.find((x) => x.id === s.id)?.name ??
-      (s.repartitionSinkTopics.length ? 'repartition' : s.stateChangelogTopics.length ? 'stateful' : 'stateless'),
+    // the broker knows no processor names, only what each subtopology reads and writes
+    name: s.repartitionSinkTopics.length ? 'repartition' : s.stateChangelogTopics.length ? 'stateful' : 'stateless',
     sourceTopics: s.sourceTopics,
     repartitionSourceTopics: s.repartitionSourceTopics,
     repartitionSinkTopics: s.repartitionSinkTopics,
     stateChangelogTopics: s.stateChangelogTopics,
-    sinkTopics: [], // not part of the topology the client sends to the broker
     // `<appId>-<store>-changelog` → `<store>`
     stores: s.stateChangelogTopics.map((t) => t.replace(`${g.groupId}-`, '').replace(/-changelog$/, '')),
     partitions: s.partitions,
@@ -149,8 +156,6 @@ export function toGroupView(
 
   return {
     groupId: g.groupId,
-    description: info?.description ?? '',
-    dsl: info?.dsl ?? '',
     // Anything else (e.g. DEAD for an unknown group) is shown as EMPTY.
     state: (KNOWN_STATES as string[]).includes(g.state) ? (g.state as GroupState) : 'EMPTY',
     groupEpoch: g.groupEpoch,
@@ -162,6 +167,9 @@ export function toGroupView(
     events,
     flow,
     configs: g.configs ?? [],
+    stalledTasks: ctx.stalledTasks,
+    stallThresholdMs: ctx.thresholdMs,
+    fenced: ctx.fenced,
   }
 }
 

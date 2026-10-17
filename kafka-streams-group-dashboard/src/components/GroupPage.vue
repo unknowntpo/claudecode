@@ -11,7 +11,7 @@ import PipelineGraph from './PipelineGraph.vue'
 import ProcessCards from './ProcessCards.vue'
 import SubtopologyDrawer from './SubtopologyDrawer.vue'
 
-const props = defineProps<{ group: GroupView; mode: 'sim' | 'real'; send: (msg: ClientMessage) => void }>()
+const props = defineProps<{ group: GroupView; send: (msg: ClientMessage) => void }>()
 const { tr } = useI18n()
 
 const selected = ref<string | null>(null)
@@ -29,9 +29,9 @@ const tabs: { id: Tab; label: Key }[] = [
   { id: 'log', label: 'tab.log' },
 ]
 
-const live = computed(() => props.group.members.filter((m) => m.status !== 'joining'))
+const live = computed(() => props.group.members)
 const processCount = computed(() => new Set(live.value.map((m) => m.processId)).size)
-const crashedCount = computed(() => new Set(props.group.members.filter((m) => m.status === 'crashed').map((m) => m.processId)).size)
+const stalledCount = computed(() => new Set(props.group.members.filter((m) => m.status === 'stalled').map((m) => m.processId)).size)
 
 const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') selected.value = null }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -55,11 +55,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 <option v-for="n in [0, 1, 2]" :key="n" :value="n">{{ n }}</option>
               </select>
             </label>
-            <button class="sc-button sc-button--primary" @click="send({ type: 'addMember', groupId: group.groupId })">{{ tr('group.start') }}</button>
           </div>
         </div>
-        <p class="description">{{ group.description }}</p>
-        <small v-if="mode === 'real'" class="note" data-testid="standby-note">{{ tr('group.standbyNote') }}</small>
+        <small class="note" data-testid="standby-note">{{ tr('group.standbyNote') }}</small>
       </header>
 
       <div class="sc-metrics">
@@ -67,14 +65,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <div class="sc-metric"><span class="sc-label">{{ tr('metric.targetEpoch') }}</span><span class="sc-metric__value">{{ group.targetAssignmentEpoch }}</span></div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.members') }}</span><span class="sc-metric__value">{{ live.length }}</span>
-          <span v-if="crashedCount" class="sc-metric__note bad" data-testid="crashed-note">× {{ tr('metric.crashed', { n: crashedCount }) }}</span>
+          <span v-if="stalledCount" class="sc-metric__note warn" data-testid="stalled-note">{{ tr('metric.stalled', { n: stalledCount }) }}</span>
           <span v-else class="sc-metric__note">{{ tr('metric.processCount', { n: processCount }) }}</span>
         </div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.tasks') }}</span><span class="sc-metric__value">{{ group.tasks.length }}</span>
           <span class="sc-metric__note">{{ tr('metric.subtopologyCount', { n: group.topology.subtopologies.length }) }}</span>
         </div>
-        <div v-if="mode === 'real'" class="sc-metric">
+        <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.inputRate') }}</span>
           <span class="sc-metric__value" data-testid="input-rate">{{ formatRate(group.flow?.inputRate) }}</span>
         </div>
@@ -93,11 +91,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </span>
         </div>
         <template v-if="tab === 'tasks'">
-          <AssignmentMatrix :group="group" :selected="selected" :send="send" />
+          <AssignmentMatrix :group="group" :selected="selected" />
           <p class="note">{{ tr('tasks.hint') }}</p>
         </template>
-        <ProcessCards v-else-if="tab === 'processes'" :group="group" :send="send" />
-        <ConfigTable v-else-if="tab === 'config'" :configs="group.configs" :mode="mode" />
+        <ProcessCards v-else-if="tab === 'processes'" :group="group" />
+        <ConfigTable v-else-if="tab === 'config'" :configs="group.configs" />
         <EventLog v-else :events="group.events" />
       </section>
     </main>
@@ -117,9 +115,8 @@ select {
   font: 500 13px/18px var(--font-mono); color: var(--ink); background: var(--surface-raised);
   border: 1px solid var(--line-strong); border-radius: var(--radius-cell); padding: 2px var(--space-1);
 }
-.description { margin: 0; max-width: 72ch; color: var(--ink-muted); }
 .note { margin: 0; color: var(--ink-muted); font-size: 13px; }
-.bad { color: var(--state-fenced); }
+.warn { color: var(--state-revoking); }
 .inspector { display: grid; gap: var(--space-4); min-width: 0; }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5, 20px); border-bottom: 1px solid var(--line); }
 .tab {

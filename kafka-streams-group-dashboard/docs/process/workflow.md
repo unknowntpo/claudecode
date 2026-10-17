@@ -27,11 +27,11 @@ A new or changed spec is accepted by the human before implementation.
 
 | Gate | Command | Where |
 | --- | --- | --- |
-| Unit tests (sim, mapping, gates) | `bun test` | local |
+| Unit tests (mapping, flow, progress, console logic, gates) | `bun test server scripts src` | local |
 | Types + build | `bun run build` | local |
 | Traceability | `bun run check:traceability` | local |
 | Test plan drift | `bun run check:test-plan` | local |
-| Real broker E2E | `bun run test:e2e` (needs `docker compose up -d` and `bun run build:java`) | local |
+| Real broker E2E | `bun run test:e2e` (builds and drives the docker compose demo; needs `bun run build:java`) | local |
 
 All gates run locally (`bun run check`): this project lives in a shared playground repository, so there is
 no CI of its own (human decision, 2026-10-15). There is no deployed environment either: `[deploy]` items are

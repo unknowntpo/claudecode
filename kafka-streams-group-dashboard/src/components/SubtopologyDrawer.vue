@@ -12,8 +12,8 @@ const { tr } = useI18n()
 const rows = computed(() => taskRows(props.group, props.sub.id))
 const inputs = computed(() => [...props.sub.sourceTopics, ...props.sub.repartitionSourceTopics])
 const outputs = computed(() => {
-  if (props.sub.repartitionSinkTopics.length) return props.sub.repartitionSinkTopics
-  return props.group.flow?.topics.filter((t) => t.kind === 'sink').map((t) => t.name) ?? []
+  // sink topics are unknown to the broker (Spec 004), so only repartition outputs are shown
+  return props.sub.repartitionSinkTopics
 })
 const inputRate = computed(() => {
   const rates = inputs.value.map((n) => props.group.flow?.topics.find((t) => t.name === n)?.rate ?? null)
@@ -52,24 +52,20 @@ const inputRate = computed(() => {
         <thead><tr><th>{{ tr('drawer.task') }}</th><th>{{ tr('drawer.active') }}</th><th>{{ tr('drawer.standby') }}</th></tr></thead>
         <tbody>
           <tr v-for="r in rows" :key="r.task">
-            <td>{{ r.task }} <span v-if="r.unowned" class="sc-unowned" :title="tr('tasks.unowned')">!</span></td>
+            <td>
+              {{ r.task }}
+              <span v-if="r.unowned" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
+              <span v-else-if="r.stalledMs !== null" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(r.stalledMs / 1000) })">!</span>
+            </td>
             <td>
               <template v-if="r.move"><span class="sc-chip sc-chip--revoking">A</span> {{ r.move }}</template>
               <template v-else-if="r.active.length">
-                <span v-for="a in r.active" :key="a.processId" class="owner">
-                  <span v-if="a.crashed" class="sc-badge sc-badge--fenced">{{ a.processId }}</span>
-                  <template v-else><span class="sc-chip sc-chip--active">A</span> {{ a.processId }}</template>
-                </span>
+                <span v-for="a in r.active" :key="a" class="owner"><span class="sc-chip sc-chip--active">A</span> {{ a }}</span>
               </template>
               <template v-else>—</template>
             </td>
             <td>
-              <template v-if="r.standby.length">
-                <span v-for="s in r.standby" :key="s.processId" class="owner">
-                  <span class="sc-chip sc-chip--standby">S</span>
-                  <span :class="{ fenced: s.crashed }">{{ s.processId }}<template v-if="s.crashed"> ×</template></span>
-                </span>
-              </template>
+              <template v-if="r.standby.length"><span class="sc-chip sc-chip--standby">S</span> {{ r.standby.join(', ') }}</template>
               <template v-else>—</template>
             </td>
           </tr>
@@ -83,6 +79,6 @@ const inputRate = computed(() => {
 .drawer { width: auto; flex: 1 1 360px; max-width: 420px; border-radius: 0; align-self: stretch; }
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .owner { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
-.fenced { color: var(--state-fenced); }
+.stalled-mark { background: var(--state-revoking); }
 @media (max-width: 900px) { .drawer { max-width: none; flex-basis: 100%; border-left: 0; border-top: 1px solid var(--line); } }
 </style>

@@ -11,7 +11,7 @@ import { useStreamsGroups } from './useStreamsGroups'
 const { snapshot, connected, send } = useStreamsGroups()
 const { tr } = useI18n()
 
-/** Spec 003 CV1: crashed first, then changing groups, then the rest. */
+/** Spec 003 CV1 / Spec 004: stalled or fenced first, then changing groups, then the rest. */
 const groups = computed(() => sortGroups(snapshot.value?.groups ?? []))
 const hash = ref(location.hash)
 const onHash = () => (hash.value = location.hash)
@@ -25,16 +25,15 @@ const navigate = (r: Route) => (location.hash = routeHash(r))
 
 <template>
   <div class="sc-root shell">
-    <Sidebar :groups="groups" :route="route" :mode="snapshot?.mode" @navigate="navigate" />
+    <Sidebar :groups="groups" :route="route" @navigate="navigate" />
     <div class="content">
       <div class="bar">
         <span class="dot" :class="{ on: connected }" :title="connected ? tr('app.connected') : tr('app.disconnected')" />
         <button class="sc-button sc-button--small" @click="send({ type: 'togglePause' })">{{ snapshot?.paused ? tr('app.resume') : tr('app.pause') }}</button>
-        <button class="sc-button sc-button--small" @click="send({ type: 'reset' })">{{ tr('app.reset') }}</button>
       </div>
       <div v-if="snapshot?.error" class="banner" data-testid="error-banner" role="alert">{{ snapshot.error }}</div>
       <p v-if="!snapshot" class="loading">{{ tr('app.connecting') }}</p>
-      <GroupPage v-else-if="group" :group="group" :mode="snapshot.mode" :send="send" />
+      <GroupPage v-else-if="group" :group="group" :send="send" />
       <OverviewPage v-else :groups="groups" @navigate="navigate" />
     </div>
   </div>

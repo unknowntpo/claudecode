@@ -2,7 +2,7 @@
 import type { GroupState, MemberView } from '../shared/types'
 
 /** StateBadge modifier for a group or member state (design system: State language). */
-export function badgeClass(state: GroupState | MemberView['state'] | MemberView['status']): string {
+export function badgeClass(state: GroupState | MemberView['state'] | MemberView['status'] | 'fenced'): string {
   switch (state) {
     case 'STABLE':
     case 'alive':
@@ -11,8 +11,9 @@ export function badgeClass(state: GroupState | MemberView['state'] | MemberView[
     case 'ASSIGNING':
     case 'UNREVOKED_TASKS':
     case 'UNRELEASED_TASKS':
+    case 'stalled':
       return 'sc-badge sc-badge--revoking'
-    case 'crashed':
+    case 'fenced':
       return 'sc-badge sc-badge--fenced'
     default:
       return 'sc-badge sc-badge--idle'

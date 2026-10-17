@@ -1,21 +1,21 @@
 <script setup lang="ts">
 import type { GroupView } from '../../shared/types'
-import { isBehind, maxLag } from '../console'
+import { hasTrouble, isBehind, maxLag } from '../console'
 import { formatCount, formatRate } from '../format'
 import { LANGS, useI18n } from '../i18n'
 import { THEMES, useTheme } from '../theme'
 import type { Route } from '../route'
 
-defineProps<{ groups: GroupView[]; route: Route; mode: 'sim' | 'real' | undefined }>()
+defineProps<{ groups: GroupView[]; route: Route }>()
 const emit = defineEmits<{ navigate: [route: Route] }>()
 const { lang, setLang, tr } = useI18n()
 const { theme, setTheme } = useTheme()
 const themeKey = { system: 'theme.system', light: 'theme.light', dark: 'theme.dark' } as const
 
 const dot = (g: GroupView) =>
-  g.members.some((m) => m.status === 'crashed')
+  g.fenced.length
     ? 'sc-dot--fenced'
-    : ['RECONCILING', 'ASSIGNING'].includes(g.state)
+    : hasTrouble(g) || ['RECONCILING', 'ASSIGNING'].includes(g.state)
       ? 'sc-dot--revoking'
       : g.state === 'STABLE'
         ? 'sc-dot--active'
@@ -71,7 +71,7 @@ const langLabel = { en: 'EN', 'zh-Hant': '繁中' }
           {{ tr(themeKey[x]) }}
         </button>
       </div>
-      <span class="sc-label" data-testid="mode">{{ mode === 'real' ? tr('app.live') : tr('app.sim') }}</span>
+      <span class="sc-label" data-testid="broker">{{ tr('app.broker') }}</span>
     </div>
   </nav>
 </template>

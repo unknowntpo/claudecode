@@ -1,8 +1,6 @@
-// Spec 001: RB10 / RB11, the real backend's failure reporting (no broker needed).
+// The console backend without a broker: failure reporting (Spec 001), rates after failures (Spec 002),
+// fenced / left processes and discovery (Spec 004).
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmodSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { RealBackend } from './backend'
 import type { InspectorGroup } from './mapping'
 
@@ -21,11 +19,15 @@ let backend: RealBackend | undefined
 afterEach(() => backend?.close())
 
 describe('RealBackend failures', () => {
-  test('RB11: missing streams-app binary → error names build:java and nothing is spawned', async () => {
-    backend = new RealBackend({ bin: '/nonexistent/streams-app', inspectorUrl: 'http://127.0.0.1:1' })
+  test('RB11: missing streams-app binary → error names build:java and nothing is polled', async () => {
+    let calls = 0
+    const inspector = Bun.serve({ port: 0, fetch: () => (calls++, Response.json({ groups: [group] })) })
+    backend = new RealBackend({ bin: '/nonexistent/streams-app', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
     expect(backend.snapshot().error).toContain('bun run build:java')
-    await backend.handle({ type: 'addMember', groupId: 'word-count' })
-    expect(backend.snapshot().groups.find((g) => g.groupId === 'word-count')!.members).toEqual([])
+    await backend.tick({ force: true })
+    expect(calls).toBe(0)
+    expect(backend.snapshot().groups).toEqual([])
+    inspector.stop(true)
   })
 
   test('RB10: inspector unreachable → error mentions it and the last known state stays', async () => {
@@ -74,29 +76,94 @@ describe('RealBackend failures', () => {
     inspector.stop(true)
   })
 
-  test('CV12: a killed process reports a growing time since its last heartbeat', async () => {
-    const member = {
-      memberId: 'm-1', memberEpoch: 3, processId: 'uuid-1', clientId: 'word-count-process-A-StreamThread-1-consumer',
-      assignment: { active: ['0_0'], standby: [], warmup: [] }, targetAssignment: { active: ['0_0'], standby: [], warmup: [] },
+  /** A fake inspector whose answer the test changes between polls, and a clock the test moves. */
+  function harness() {
+    let groups: InspectorGroup[] = []
+    let clock = 1_000_000
+    const inspector = Bun.serve({ port: 0, fetch: () => Response.json({ groups }) })
+    const b = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${inspector.port}`, now: () => clock })
+    return {
+      backend: b,
+      set: (next: InspectorGroup[]) => (groups = next),
+      poll: async (advanceMs: number) => {
+        clock += advanceMs
+        await b.tick({ force: true })
+      },
+      stop: () => inspector.stop(true),
     }
-    const inspector = Bun.serve({ port: 0, fetch: () => Response.json({ groups: [{ ...group, members: [member] }] }) })
-    // a fake streams-app that stays alive until killed, whatever its arguments
-    const bin = join(tmpdir(), `fake-streams-app-${process.pid}`)
-    await Bun.write(bin, '#!/bin/sh\nexec sleep 30\n')
-    chmodSync(bin, 0o755)
-    backend = new RealBackend({ bin, inspectorUrl: `http://127.0.0.1:${inspector.port}` })
-    await backend.handle({ type: 'addMember', groupId: 'word-count' })
-    await backend.tick({ force: true })
-    const silent = () => backend!.snapshot().groups.find((g) => g.groupId === 'word-count')!.members[0]
-    expect(silent().status).toBe('alive') // positive control: not killed yet, no duration
-    expect(silent().msSinceHeartbeat).toBe(0)
-    await backend.handle({ type: 'killProcess', groupId: 'word-count', processId: 'process-A' })
-    await Bun.sleep(30)
-    const first = silent().msSinceHeartbeat
-    await Bun.sleep(30)
-    expect(silent().status).toBe('crashed')
-    expect(first).toBeGreaterThan(0)
-    expect(silent().msSinceHeartbeat).toBeGreaterThan(first)
+  }
+  const sub = { id: '0', sourceTopics: ['text-lines'], repartitionSourceTopics: [], repartitionSinkTopics: [], stateChangelogTopics: [], partitions: 1 }
+  const m = (memberId: string, label: string, active: string[]) => ({
+    memberId, memberEpoch: 3, processId: `uuid-${memberId}`, clientId: `word-count-${label}-StreamThread-1-consumer`,
+    assignment: { active, standby: [], warmup: [] }, targetAssignment: { active, standby: [], warmup: [] },
+  })
+  const wc = (members: ReturnType<typeof m>[], end: number, committed: number): InspectorGroup => ({
+    ...group, subtopologies: [sub], members,
+    endOffsets: { 'text-lines': { '0': end } }, committedOffsets: { 'text-lines': { '0': committed } },
+  })
+
+  test('RO11: a stalled process that disappears is fenced and its card stays 60 s', async () => {
+    const h = harness()
+    backend = h.backend
+    h.set([wc([m('m1', 'a', []), m('m2', 'b', ['0_0'])], 10, 10)])
+    await h.poll(0)
+    for (let i = 1; i <= 7; i++) {
+      h.set([wc([m('m1', 'a', []), m('m2', 'b', ['0_0'])], 10 + i * 5, 10)]) // input grows, nothing commits
+      await h.poll(1000)
+    }
+    const g = () => backend!.snapshot().groups[0]
+    expect(g().members.find((x) => x.memberId === 'm2')!.status).toBe('stalled') // positive control
+    h.set([wc([m('m1', 'a', ['0_0'])], 50, 10)])
+    await h.poll(1000)
+    expect(g().fenced.map((f) => [f.processId, f.tasks])).toEqual([['b', ['0_0']]])
+    expect(g().events.map((e) => e.message).join('\n')).toContain('b fenced after no progress for 7 s')
+    await h.poll(59_000)
+    expect(g().fenced).toHaveLength(1)
+    await h.poll(1_500)
+    expect(g().fenced).toEqual([])
+    h.stop()
+  })
+
+  test('RO11: a process that disappears without stalling left, no card', async () => {
+    const h = harness()
+    backend = h.backend
+    h.set([wc([m('m1', 'a', []), m('m2', 'b', ['0_0'])], 10, 10)])
+    await h.poll(0)
+    h.set([wc([m('m1', 'a', ['0_0'])], 11, 11)])
+    await h.poll(1000)
+    const g = backend.snapshot().groups[0]
+    expect(g.fenced).toEqual([])
+    expect(g.events.map((e) => e.message)).toContain('b left')
+    h.stop()
+  })
+
+  test('RO8: a group the broker no longer lists disappears', async () => {
+    const h = harness()
+    backend = h.backend
+    h.set([wc([], 0, 0), { ...wc([], 0, 0), groupId: 'other' }])
+    await h.poll(0)
+    expect(backend.snapshot().groups.map((x) => x.groupId)).toEqual(['word-count', 'other']) // positive control
+    h.set([wc([], 0, 0)])
+    await h.poll(1000)
+    expect(backend.snapshot().groups.map((x) => x.groupId)).toEqual(['word-count'])
+    h.stop()
+  })
+
+  test('RO3: the console sends no application control; only the standby config reaches the inspector', async () => {
+    const posts: string[] = []
+    const inspector = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        if (req.method === 'POST') posts.push(new URL(req.url).pathname)
+        return req.method === 'POST' ? new Response(null, { status: 204 }) : Response.json({ groups: [group] })
+      },
+    })
+    backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    for (const legacy of ['addMember', 'stopProcess', 'killProcess', 'reset'])
+      await backend.handle({ type: legacy, groupId: 'word-count', processId: 'a' } as never)
+    expect(posts).toEqual([])
+    await backend.handle({ type: 'setStandbyReplicas', groupId: 'word-count', value: 1 }) // positive control
+    expect(posts).toEqual(['/groups/word-count/standby'])
     inspector.stop(true)
   })
 

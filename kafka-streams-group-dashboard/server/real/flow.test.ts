@@ -46,7 +46,7 @@ describe('computeFlow', () => {
   const g = {
     topics: [
       { name: 'text-lines', kind: 'source' as const, endOffset: 150 },
-      { name: 'word-counts', kind: 'sink' as const, endOffset: 40 },
+      { name: 'counts-changelog', kind: 'changelog' as const, endOffset: 40 },
     ],
     committed: { 'text-lines': 140 },
     subtopologies: [{ id: '0', sourceTopics: ['text-lines'], repartitionSourceTopics: [] }],
@@ -60,7 +60,7 @@ describe('computeFlow', () => {
   })
 
   test('CS2: a second poll gives rates per topic and the input rate', () => {
-    const flow = computeFlow(g, { 'text-lines': 100, 'word-counts': 30 }, 10_000) // positive control for CS10
+    const flow = computeFlow(g, { 'text-lines': 100, 'counts-changelog': 30 }, 10_000) // positive control for CS10
     expect(flow.topics.map((t) => t.rate)).toEqual([5, 1])
     expect(flow.inputRate).toBe(5)
   })
@@ -68,7 +68,7 @@ describe('computeFlow', () => {
 
 describe('computeFlow: word-count with a repartition topic', () => {
   const rep = 'word-count-counts-store-repartition'
-  const wc = (topics: { name: string; kind: 'source' | 'repartition' | 'changelog' | 'sink'; endOffset?: number }[]) => ({
+  const wc = (topics: { name: string; kind: 'source' | 'repartition' | 'changelog'; endOffset?: number }[]) => ({
     topics,
     committed: { 'text-lines': 140, [rep]: 900 },
     subtopologies: [
@@ -80,15 +80,15 @@ describe('computeFlow: word-count with a repartition topic', () => {
     { name: 'text-lines', kind: 'source', endOffset: 150 },
     { name: rep, kind: 'repartition', endOffset: 1000 },
     { name: 'word-count-counts-store-changelog', kind: 'changelog', endOffset: 500 },
-    { name: 'word-counts', kind: 'sink', endOffset: 40 },
+    { name: 'counts-changelog', kind: 'changelog', endOffset: 40 },
   ])
-  const previous = { 'text-lines': 100, [rep]: 600, 'word-count-counts-store-changelog': 400, 'word-counts': 30 }
+  const previous = { 'text-lines': 100, [rep]: 600, 'word-count-counts-store-changelog': 400, 'counts-changelog': 30 }
 
   test('CS3: a subtopology fed by a repartition topic has lag from that topic', () => {
     expect(computeFlow(all, previous, 10_000).lag).toEqual({ '0': 10, '1': 100 })
   })
 
-  test('CS2: the input rate sums source topics only, not repartition, changelog or sink', () => {
+  test('CS2: the input rate sums source topics only, not repartition or changelog', () => {
     const flow = computeFlow(all, previous, 10_000)
     expect(flow.topics.map((t) => t.rate)).toEqual([5, 40, 10, 1]) // positive control: every topic has a rate
     expect(flow.inputRate).toBe(5)
@@ -114,8 +114,8 @@ describe('computeFlow: word-count with a repartition topic', () => {
   })
 
   test('CS9: a group without source topics has an unknown input rate, not 0', () => {
-    const flow = computeFlow(wc([{ name: 'word-counts', kind: 'sink', endOffset: 40 }]), { 'word-counts': 30 }, 10_000)
-    expect(flow.topics[0].rate).toBe(1) // positive control: the sink still has a rate
+    const flow = computeFlow(wc([{ name: 'counts-changelog', kind: 'changelog', endOffset: 40 }]), { 'counts-changelog': 30 }, 10_000)
+    expect(flow.topics[0].rate).toBe(1) // positive control: a changelog topic still has a rate
     expect(flow.inputRate).toBeNull()
   })
 })

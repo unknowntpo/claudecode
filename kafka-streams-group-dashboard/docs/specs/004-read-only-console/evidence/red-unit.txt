@@ -1,0 +1,3 @@
+error: Cannot find module './progress' from '/Users/unknowntpo/repo/unknowntpo/claudecode/.claude/worktrees/zealous-hamilton/kafka-streams-group-dashboard/server/real/progress.test.ts'
+ 0 pass
+ 1 fail

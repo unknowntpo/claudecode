@@ -27,9 +27,9 @@ describe('format', () => {
   test('RB6: state badges follow the design system state language', () => {
     expect(badgeClass('STABLE')).toBe('sc-badge sc-badge--active')
     expect(badgeClass('alive')).toBe('sc-badge sc-badge--active')
-    for (const s of ['RECONCILING', 'ASSIGNING', 'UNREVOKED_TASKS', 'UNRELEASED_TASKS'] as const)
+    for (const s of ['RECONCILING', 'ASSIGNING', 'UNREVOKED_TASKS', 'UNRELEASED_TASKS', 'stalled'] as const)
       expect(badgeClass(s)).toBe('sc-badge sc-badge--revoking')
-    expect(badgeClass('crashed')).toBe('sc-badge sc-badge--fenced')
-    for (const s of ['EMPTY', 'NOT_READY', 'joining'] as const) expect(badgeClass(s)).toBe('sc-badge sc-badge--idle')
+    expect(badgeClass('fenced')).toBe('sc-badge sc-badge--fenced')
+    for (const s of ['EMPTY', 'NOT_READY'] as const) expect(badgeClass(s)).toBe('sc-badge sc-badge--idle')
   })
 })

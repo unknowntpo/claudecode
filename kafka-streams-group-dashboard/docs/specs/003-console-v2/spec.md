@@ -1,6 +1,6 @@
 # Spec 003: Console v2 — screens, palette and EN / 繁中
 
-Status: Accepted (2026-10-17, human: "畫面 ok，開 Spec 003 實作吧")
+Status: Accepted (2026-10-17, human: "畫面 ok，開 Spec 003 實作吧"); crash wording, process actions and the simulator superseded by Spec 004
 Date: 2026-10-17
 Traceability: enforced
 Builds on: Spec 002; design system v2 (<https://claude.ai/artifact/FBr69Pi42psrJXtz6wSZxy>, version 1792214555-094d);
@@ -91,9 +91,9 @@ The canvas's four artboards are the example, with this live scenario (values fro
 - CV7: a missing `zh-Hant` key falls back to the English text, never the key.
 - CV8: a stored language that is not `en` / `zh-Hant`, or storage that throws → the browser default.
 - CV9: the selected subtopology disappears (topology changed to one without it; an emptied group keeps its topology on a real broker) → the drawer closes.
-- CV10: a crashed process without a known stop time (the console neither killed it nor saw its JVM exit) → its card has no "N s ago" text.
+- ~~CV10~~ superseded by Spec 004 RO4 / RO11: the console no longer knows kill times; stalled time comes from committed offsets.
 - CV11: [deploy] no groups or no members → overview and processes show their empty states, not a blank panel.
-- CV12: the killed-at time survives polls: `msSinceHeartbeat` grows between two snapshots of a killed process.
+- ~~CV12~~ superseded by Spec 004 RO4 (no-progress time replaces time since a console kill).
 
 - CV15: theme rows below: stored choice → `data-theme` value; unknown or throwing storage → System.
 
@@ -109,7 +109,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 <!-- test-plan:start src/console.cases.ts -->
 | id | case | groups | lag | rate | expected |
 | --- | --- | --- | --- | --- | --- |
-| CV1 | crashed member first, then transitional states, then the rest | word-count:STABLE pvs:STABLE:crashed orders:RECONCILING |  |  | pvs orders word-count |
+| CV1 | stalled member first, then transitional states, then the rest | word-count:STABLE pvs:STABLE:stalled orders:RECONCILING |  |  | pvs orders word-count |
 | CV1 | same rank sorts by id | zeta:STABLE alpha:STABLE |  |  | alpha zeta |
 | CV1 | ASSIGNING and NOT_READY rank with RECONCILING | b:STABLE a:NOT_READY c:ASSIGNING |  |  | a c b |
 | CV1 | EMPTY ranks with STABLE | b:EMPTY a:STABLE |  |  | a b |
@@ -143,24 +143,20 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | id | case | members | subtopology | expected |
 | --- | --- | --- | --- | --- |
 | CV3 | stable owner and standby on another process | A/m1 alive a=0_0 \| B/m2 alive s=0_0 | 0 | 0_0 A:A S:B |
-| CV3 | crashed owner: no working owner, standby elsewhere | A/m1 alive s=0_3 \| B/m2 crashed a=0_3 | 0 | 0_3 A:B× S:A ! |
+| CV3 | stalled owner: marked stalled, standby elsewhere | A/m1 alive s=0_3 \| B/m2 stalled a=0_3 ms=6000 | 0 | 0_3 A:B S:A stalled |
 | CV3 | owner revoking, new owner waiting: a move | A/m1 alive a=0_2 r=0_2 \| B/m2 alive t=0_2 | 0 | 0_2 A:A→B |
 | CV3 | owner revoking with nobody waiting is no move | A/m1 alive a=0_2 r=0_2 | 0 | 0_2 A:A |
 | CV3 | standby comes from the owned assignment, not the target | A/m1 alive a=0_1 \| B/m2 alive ts=0_1 | 0 | 0_1 A:A |
-| CV3 | a crashed standby holder is marked | A/m1 alive a=0_0 \| B/m2 crashed s=0_0 | 0 | 0_0 A:A S:B× |
+| CV3 | another task of a stalled member is not stalled | A/m1 alive a=0_0 \| B/m2 stalled a=0_1 s=0_0 ms=6000 | 0 | 0_0 A:A S:B |
 | CV3 | subtopology 1 does not include subtopology 10 | A/m1 alive a=1_0,10_0 | 1 | 1_0 A:A |
 | CV3 | nobody owns it | A/m1 alive a=1_0 | 0 | 0_0 A:— ! |
 | CV3 | other subtopologies are left out | A/m1 alive a=0_0,1_0 | 0 | 0_0 A:A |
-| CV4 | alive before crashed, threads with tasks in task order, active then standby | B/m2 crashed a=0_3 ms=6000 \| A/m1 alive a=0_1,0_0 s=0_3 |  | A alive [m1: 0_0A 0_1A 0_3S] \| B crashed 6s [m2: 0_3A] |
-| CV4 | alive first even when the crashed process sorts first by name | A/m1 crashed a=0_0 \| B/m2 alive a=0_1 |  | B alive [m2: 0_1A] \| A crashed [m1: 0_0A] |
-| CV4 | starting before crashed | A/m1 crashed a=0_0 \| C/(starting) joining |  | C joining [(starting): ] \| A crashed [m1: 0_0A] |
-| CV4 | a process with one starting thread is alive | A/m1 alive a=0_0 \| A/(starting) joining |  | A alive [m1: 0_0A] [(starting): ] |
+| CV4 | alive before stalled, threads with tasks in task order, active then standby | B/m2 stalled a=0_3 ms=6000 \| A/m1 alive a=0_1,0_0 s=0_3 |  | A alive [m1: 0_0A 0_1A 0_3S] \| B stalled 6s [m2: 0_3A] |
+| CV4 | alive first even when the stalled process sorts first by name | A/m1 stalled a=0_0 ms=7000 \| B/m2 alive a=0_1 |  | B alive [m2: 0_1A] \| A stalled 7s [m1: 0_0A] |
+| CV4 | one stalled thread makes its process stalled, with the longest stall | A/m1 alive a=0_0 \| A/m3 stalled a=0_1 ms=8000 |  | A stalled 8s [m1: 0_0A] [m3: 0_1A] |
 | CV4 | tasks sort by subtopology, then partition | A/m1 alive a=1_0,0_1 |  | A alive [m1: 0_1A 1_0A] |
 | CV4 | alive processes sort by label | B/m2 alive a=0_1 \| A/m1 alive a=0_0 |  | A alive [m1: 0_0A] \| B alive [m2: 0_1A] |
 | CV4 | two threads in one process | A/m1 alive a=0_0 \| A/m3 alive a=0_1 |  | A alive [m1: 0_0A] [m3: 0_1A] |
-| CV10 | crashed without a known kill time has no duration | B/m2 crashed a=0_0 |  | B crashed [m2: 0_0A] |
-| CV4 | an alive process with a recent heartbeat shows no duration | A/m1 alive a=0_0 ms=1500 |  | A alive [m1: 0_0A] |
-| CV4 | a starting process | C/(starting) joining |  | C joining [(starting): ] |
 | CV4 | no members |  |  |  |
 <!-- test-plan:end -->
 

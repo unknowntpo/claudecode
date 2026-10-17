@@ -12,7 +12,6 @@ export interface Subtopology {
   repartitionSourceTopics: string[]
   repartitionSinkTopics: string[]
   stateChangelogTopics: string[]
-  sinkTopics: string[]
   stores: string[]
   /** Number of input partitions == number of tasks of this subtopology. */
   partitions: number
@@ -40,15 +39,25 @@ export interface MemberView {
   clientId: string
   memberEpoch: number
   state: MemberState
-  /** joining = started but has not sent its first heartbeat yet. */
-  status: 'joining' | 'alive' | 'crashed'
+  /** stalled = owns an active task that made no progress past the stall threshold (Spec 004 Behavior 4). */
+  status: 'alive' | 'stalled'
   /** Tasks the member currently owns (as known by the coordinator). */
   assignment: Assignment
   /** Tasks the member was asked to give up but has not acknowledged yet. */
   pendingRevocation: Assignment
   /** Target assignment computed by the broker-side assignor. */
   target: Assignment
-  msSinceHeartbeat: number
+  /** Longest time without progress among its stalled active tasks; null when not stalled. */
+  stalledMs: number | null
+}
+
+/** A process the broker fenced after it stopped making progress; shown for 60 s (Spec 004 RO11). */
+export interface FencedProcess {
+  processId: string
+  fencedAt: number
+  stalledMs: number
+  /** Active tasks it owned when last seen. */
+  tasks: TaskId[]
 }
 
 export interface LogEvent {
@@ -59,7 +68,7 @@ export interface LogEvent {
   message: string
 }
 
-export type TopicKind = 'source' | 'repartition' | 'changelog' | 'sink'
+export type TopicKind = 'source' | 'repartition' | 'changelog'
 
 export interface TopicFlow {
   name: string
@@ -86,8 +95,6 @@ export interface ConfigEntry {
 
 export interface GroupView {
   groupId: string
-  description: string
-  dsl: string
   state: GroupState
   groupEpoch: number
   targetAssignmentEpoch: number
@@ -96,26 +103,22 @@ export interface GroupView {
   tasks: TaskId[]
   members: MemberView[]
   events: LogEvent[]
-  /** Real mode only; the simulator has no records. */
   flow: GroupFlow | null
   configs: ConfigEntry[]
+  /** Stalled tasks: ms since their last commit (Spec 004 Behavior 4). */
+  stalledTasks: Record<TaskId, number>
+  stallThresholdMs: number
+  fenced: FencedProcess[]
 }
 
 export interface Snapshot {
-  /** sim = in-process coordinator simulation, real = live Kafka broker. */
-  mode: 'sim' | 'real'
-  /** Set when the real backend cannot reach the broker / inspector. */
+  /** Set when the backend cannot reach the broker / inspector. */
   error?: string
   paused: boolean
   groups: GroupView[]
 }
 
+/** The console is read-only (Spec 004): the only write is the broker-side standby group config. */
 export type ClientMessage =
-  | { type: 'addMember'; groupId: string; processId?: string }
-  /** Graceful shutdown of a whole process (all its members leave the group). */
-  | { type: 'stopProcess'; groupId: string; processId: string }
-  /** Hard kill: the process stops heart-beating and is fenced after the session timeout. */
-  | { type: 'killProcess'; groupId: string; processId: string }
   | { type: 'setStandbyReplicas'; groupId: string; value: number }
   | { type: 'togglePause' }
-  | { type: 'reset' }

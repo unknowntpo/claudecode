@@ -1,6 +1,6 @@
 # Spec 001: Real-broker mode
 
-Status: Accepted (2026-10-15)
+Status: Accepted (2026-10-15); process control superseded by Spec 004 (the console is read-only)
 Date: 2026-10-14
 Traceability: enforced
 Builds on: the simulator dashboard (commit 1e38227)
@@ -164,22 +164,22 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 ### Behavior
 - RB1: (contract extended by Spec 002 with `topics`, `committed`, `configs`) inspector running, word-count has one process → `GET /groups?ids=word-count` → 200 with the Example's fields, task ids `<sub>_<partition>` → test asserts shape.
 - RB2: inspector running → `GET /groups?ids=no-such-group` → that group has `state: "EMPTY"`, no members, no subtopologies.
-- RB3: no processes → start two word-count processes, wait for STABLE → each of `0_0..0_3`, `1_0..1_3` is active on exactly one member, and both processes own at least one task.
-- RB4: one process → `+ thread` → two members with the same process label within 20 s.
-- RB5: two processes STABLE → set standby replicas to 1, then start a third process (next rebalance) → each stateful task (`1_x`) has exactly one standby, on a different process than its active; stateless tasks (`0_x`) have none.
+- RB3: (Spec 004: instances are docker compose services) no instances → `docker compose up -d --scale word-count=2`, wait for STABLE → each of `0_0..0_3`, `1_0..1_3` is active on exactly one member, and both processes own at least one task.
+- RB4: (Spec 004: thread count is the app's own config) an instance started with 2 StreamThreads (`STREAM_THREADS=2`) → two members with the same process label within 20 s.
+- RB5: two instances STABLE → set standby replicas to 1, then scale to a third instance (next rebalance) → each stateful task (`1_x`) has exactly one standby, on a different process than its active; stateless tasks (`0_x`) have none.
 - RB6: mapping rows below (process label, derived member state, pending revocation, crashed status).
 
 ### Failure and retry
-- RB7: two processes STABLE → SIGKILL one → its members show `crashed` while still listed; within 25 s (10 s session timeout set by the inspector + polling) every task is active on the survivor.
-- RB8: two processes STABLE → SIGTERM one → its members disappear before the session timeout (graceful leave).
-- RB9: a process JVM is killed outside the dashboard (`kill -9 <pid>`) → its members show `crashed`.
+- ~~RB7~~ superseded by Spec 004 RO5: the console no longer kills processes, so it no longer shows `crashed`.
+- ~~RB8~~ superseded by Spec 004 RO6 (`docker compose stop` → left at once).
+- ~~RB9~~ superseded by Spec 004 RO5 (a killed instance shows up as stalled, then fenced).
 - RB10: inspector unreachable, or reachable but not answering (e.g. broker stopped: the Admin call would block for its 60 s default timeout) → within 5 s the snapshot `error` mentions the inspector/broker; groups keep their last state.
-- RB11: `streams-app` binary missing → snapshot `error` says to run `bun run build:java`; no process is spawned.
+- RB11: `streams-app` binary missing → snapshot `error` says to run `bun run build:java`; the inspector is not started and nothing is polled.
 - RB12: broker reports `NOT_READY` / `DEAD` → mapped per Behavior 4 (rows below).
 - RB17: word-count has no members → broker restarts → `GET /groups?ids=word-count,order-enrichment` → 200; word-count is `EMPTY` (the broker answers without topology and `Admin` throws `Topology information is missing`), the other group is still described.
 
 ### Budget
-- RB13: one process STABLE → start a second process → group is STABLE with the new member owning tasks within 8 s (measured 2.9 s on 2026-10-15; a 9 s heartbeat interval took 9.9 s and must fail this; human decision 2026-10-17).
+- RB13: one instance STABLE → `docker compose up -d --scale word-count=2` → from the moment the new member joins (container and JVM start-up excluded since Spec 004), the group is STABLE with the new member owning tasks within 8 s (measured 2.9 s on 2026-10-15; a 9 s heartbeat interval took 9.9 s and must fail this; human decision 2026-10-17).
 
 ### Observability
 - RB14: [deploy] snapshot `error` is shown as a banner in the dashboard (checked in the running local app by the verifier).
@@ -189,7 +189,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 ### Test plan: mapping (RB6, RB12)
 
 <!-- test-plan:start server/real/mapping.cases.ts -->
-| id | case | assignment | target | clientId | killed | brokerState | expectedLabel | expectedMemberState | expectedPendingRevocation | expectedStatus | expectedGroupState |
+| id | case | assignment | target | clientId | stalled | brokerState | expectedLabel | expectedMemberState | expectedPendingRevocation | expectedStatus | expectedGroupState |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RB6 | assignment equals target | 0_0,0_1\| | 0_1,0_0\| | word-count-process-A-StreamThread-1-consumer | no | STABLE | process-A | STABLE | \| | alive | STABLE |
 | RB6 | owns a task no longer in target | 0_0,0_1\| | 0_0\| | word-count-process-A-StreamThread-1-consumer | no | STABLE | process-A | UNREVOKED_TASKS | 0_1\| | alive | STABLE |
@@ -201,7 +201,9 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 | RB6 | client.id with the app id but no dash after it falls back | \| | \| | word-countX-process-A-StreamThread-1-consumer | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
 | RB6 | client.id equal to the app id falls back | \| | \| | word-count | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
 | RB6 | no label before -StreamThread: the rest is kept, never empty | \| | \| | word-count--StreamThread-1-consumer | no | STABLE | -StreamThread-1-consumer | STABLE | \| | alive | STABLE |
-| RB6 | process killed by the dashboard | 0_0\| | 0_0\| | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | crashed | STABLE |
+| RO2 | a compose container label is cut to its service and index | \| | \| | word-count-kafka-streams-group-dashboard-word-count-2-StreamThread-1-consumer | no | STABLE | word-count-2 | STABLE | \| | alive | STABLE |
+| RO4 | owns a stalled active task | 0_0\| | 0_0\| | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | stalled | STABLE |
+| RO4 | holds a stalled task only as standby: not stalled | \|0_0 | \|0_0 | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | alive | STABLE |
 | RB12 | broker state NOT_READY (missing source topics) | \| | \| | word-count-process-A-StreamThread-1-consumer | no | NOT_READY | process-A | STABLE | \| | alive | NOT_READY |
 | RB12 | broker state DEAD | \| | \| | word-count-process-A-StreamThread-1-consumer | no | DEAD | process-A | STABLE | \| | alive | EMPTY |
 | RB12 | broker state RECONCILING | \| | \| | word-count-process-A-StreamThread-1-consumer | no | RECONCILING | process-A | STABLE | \| | alive | RECONCILING |

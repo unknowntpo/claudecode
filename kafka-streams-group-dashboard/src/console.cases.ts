@@ -4,7 +4,7 @@
 export interface ConsoleCase {
   id: string
   case: string
-  /** CV1: groups as "id:state[:crashed]" separated by spaces. */
+  /** CV1: groups as "id:state[:stalled]" separated by spaces. */
   groups: string
   /** CV2: largest subtopology lag and input rate ("-" = unknown). */
   lag: string
@@ -16,7 +16,7 @@ const order = (c: string, groups: string, expected: string): ConsoleCase => ({ i
 const behind = (c: string, lag: string, rate: string, expected: 'behind' | 'ok'): ConsoleCase => ({ id: 'CV2', case: c, groups: '', lag, rate, expected })
 
 export const testPlanRows: ConsoleCase[] = [
-  order('crashed member first, then transitional states, then the rest', 'word-count:STABLE pvs:STABLE:crashed orders:RECONCILING', 'pvs orders word-count'),
+  order('stalled member first, then transitional states, then the rest', 'word-count:STABLE pvs:STABLE:stalled orders:RECONCILING', 'pvs orders word-count'),
   order('same rank sorts by id', 'zeta:STABLE alpha:STABLE', 'alpha zeta'),
   order('ASSIGNING and NOT_READY rank with RECONCILING', 'b:STABLE a:NOT_READY c:ASSIGNING', 'a c b'),
   order('EMPTY ranks with STABLE', 'b:EMPTY a:STABLE', 'a b'),

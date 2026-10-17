@@ -1,4 +1,4 @@
-// Starts the Bun simulator (port 3000) and the Vite dev server together.
+// Starts the console server (port 3000) and the Vite dev server together.
 const procs = [
   Bun.spawn(['bun', '--watch', 'server/index.ts'], { stdio: ['inherit', 'inherit', 'inherit'] }),
   // Vite runs on Node: under the Bun runtime its /ws proxy never completes the WebSocket upgrade

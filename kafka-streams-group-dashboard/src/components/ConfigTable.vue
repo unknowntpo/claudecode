@@ -2,14 +2,13 @@
 import type { ConfigEntry } from '../../shared/types'
 import { useI18n } from '../i18n'
 
-defineProps<{ configs: ConfigEntry[]; mode: 'sim' | 'real' }>()
+defineProps<{ configs: ConfigEntry[] }>()
 const { tr } = useI18n()
 </script>
 
 <template>
   <div>
-    <p v-if="mode === 'sim'" class="note">{{ tr('config.sim') }}</p>
-    <p v-else-if="configs.length === 0" class="note">{{ tr('config.none') }}</p>
+    <p v-if="configs.length === 0" class="note">{{ tr('config.none') }}</p>
     <table v-else class="sc-config">
       <thead>
         <tr><th>{{ tr('config.key') }}</th><th>{{ tr('config.value') }}</th><th>{{ tr('config.scope') }}</th></tr>
@@ -24,7 +23,7 @@ const { tr } = useI18n()
         </tr>
       </tbody>
     </table>
-    <p v-if="mode === 'real'" class="note">{{ tr('group.standbyNote') }}</p>
+    <p class="note">{{ tr('group.standbyNote') }}</p>
   </div>
 </template>
 

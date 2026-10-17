@@ -1,0 +1,13 @@
+RO4a: CAUGHT (server/real/progress.ts)
+RO4b: CAUGHT (server/real/progress.ts)
+RO4c: CAUGHT (server/real/progress.ts)
+RO4d: CAUGHT (server/real/progress.ts)
+RO4e: CAUGHT (server/real/mapping.ts)
+RO11a: CAUGHT (server/real/progress.ts)
+RO11b: NOT APPLIED
+RO11c: CAUGHT (src/console.ts)
+RO8: CAUGHT (server/real/backend.ts)
+RO2: CAUGHT (server/real/mapping.ts)
+RO3: CAUGHT (server/real/backend.ts)
+RO1: CAUGHT (server/real/mapping.ts)
+RO11b: CAUGHT (server/real/backend.ts)

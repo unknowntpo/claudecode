@@ -1,16 +1,13 @@
-// Bun server: pushes streams-group snapshots over a WebSocket.
-// MODE=real (default) reads a live Kafka broker, MODE=sim runs the in-process simulator.
-// In production it also serves the built Vue app from ./dist.
+// Bun server: pushes streams-group snapshots over a WebSocket. Read-only towards the applications
+// (Spec 004); in production it also serves the built Vue app from ./dist.
 
 import type { ClientMessage } from '../shared/types'
-import type { Backend } from './backend'
 import { RealBackend } from './real/backend'
-import { SimBackend } from './sim'
 
 const TICK_MS = 250
 const DIST = `${import.meta.dir}/../dist`
 
-const backend: Backend = process.env.MODE === 'sim' ? new SimBackend() : new RealBackend()
+const backend = new RealBackend()
 
 const server = Bun.serve({
   // SERVER_PORT, not PORT: preview tools set PORT for the Vite dev server, which proxies /ws to 3000
@@ -55,4 +52,4 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     process.exit(0)
   })
 
-console.log(`streams-group dashboard (${process.env.MODE === 'sim' ? 'sim' : 'real'} mode) on http://localhost:${server.port}`)
+console.log(`streams-group dashboard on http://localhost:${server.port}`)

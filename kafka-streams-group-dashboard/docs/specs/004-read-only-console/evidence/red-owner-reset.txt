@@ -1,0 +1,8 @@
+Expected: "ok (threshold 5000)"
+Received: "stalled 8000 (threshold 5000)"
+(fail) RO4: a new owner restarts the clock: restoring after a rebalance is not a stall [0.22ms]
+Expected: "stalled 6000 (threshold 5000)"
+Received: "stalled 10000 (threshold 5000)"
+(fail) RO4: the new owner stalls too once the threshold passes [0.07ms]
+ 12 pass
+ 2 fail

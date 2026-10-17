@@ -1,4 +1,21 @@
-# Single-node KRaft broker with the streams rebalance protocol (KIP-1071, early access in 4.1).
+# Spec 004 demo workload: a single-node KRaft broker with the streams rebalance protocol (KIP-1071, early
+# access in 4.1), a one-shot setup, the demo producer and the three demo Kafka Streams apps.
+#   docker compose up -d --build                 # everything, one instance per app
+#   docker compose up -d --scale word-count=2    # a second word-count instance
+#   docker compose kill <container> / stop <container>
+# Each app instance's client.id is <app>-<container name>, e.g.
+# word-count-kafka-streams-group-dashboard-word-count-2 (label = the container name).
+# The console runs on the host and connects to localhost:9092; containers use kafka:19092.
+
+x-streams-app: &streams-app
+  build: ./streams-app
+  image: ksgd-streams-app:latest
+  environment:
+    BOOTSTRAP: kafka:19092
+  depends_on:
+    setup:
+      condition: service_completed_successfully
+
 services:
   kafka:
     image: apache/kafka:4.1.0
@@ -7,8 +24,11 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # PLAINTEXT for the host (console, e2e), PLAINTEXT_INTERNAL for the compose network
+      KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_INTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -24,3 +44,39 @@ services:
       KAFKA_GROUP_STREAMS_MIN_HEARTBEAT_INTERVAL_MS: 1000
       KAFKA_GROUP_STREAMS_SESSION_TIMEOUT_MS: 10000
       KAFKA_GROUP_STREAMS_MIN_SESSION_TIMEOUT_MS: 6000
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:19092"]
+      interval: 5s
+      timeout: 20s
+      start_period: 10s
+      retries: 20
+
+  # source topics and demo group configs, then exits 0 (idempotent)
+  setup:
+    <<: *streams-app
+    command: ["setup"]
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  producer:
+    <<: *streams-app
+    command: ["produce"]
+
+  # scalable: no container_name, no host ports
+  word-count:
+    <<: *streams-app
+    command: ["run", "word-count"]
+    environment:
+      BOOTSTRAP: kafka:19092
+      # StreamThreads per instance; each thread is one member of the streams group
+      STREAM_THREADS: ${WORD_COUNT_THREADS:-1}
+
+  order-enrichment:
+    <<: *streams-app
+    command: ["run", "order-enrichment"]
+
+  page-view-sessions:
+    <<: *streams-app
+    command: ["run", "page-view-sessions"]

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { pipelineLayout } from '../../shared/pipeline'
 import type { GroupView } from '../../shared/types'
-import { isBehind, maxLag, processCards } from '../console'
+import { fencedCards, isBehind, maxLag, processCards } from '../console'
 import { badgeClass, formatCount, formatRate } from '../format'
 import { useI18n } from '../i18n'
 import type { Route } from '../route'
@@ -12,8 +12,10 @@ const emit = defineEmits<{ navigate: [route: Route] }>()
 const { tr } = useI18n()
 
 const cards = computed(() => props.groups.map((g) => ({ g, cards: processCards(g) })))
-const processTotal = computed(() => cards.value.reduce((n, c) => n + c.cards.filter((x) => x.status !== 'joining').length, 0))
-const crashed = computed(() => cards.value.flatMap(({ g, cards }) => cards.filter((c) => c.status === 'crashed').map((c) => ({ g, c }))))
+const processTotal = computed(() => cards.value.reduce((n, c) => n + c.cards.length, 0))
+/** One alert per stalled process and per process fenced in the last minute (Spec 004 Behavior 4). */
+const stalled = computed(() => cards.value.flatMap(({ g, cards }) => cards.filter((c) => c.status === 'stalled').map((c) => ({ g, c }))))
+const fenced = computed(() => props.groups.flatMap((g) => fencedCards(g).map((f) => ({ g, f }))))
 const stable = computed(() => props.groups.filter((g) => g.state === 'STABLE').length)
 const moving = computed(() => props.groups.filter((g) => ['RECONCILING', 'ASSIGNING'].includes(g.state)).length)
 const rates = computed(() => props.groups.map((g) => g.flow?.inputRate).filter((r): r is number => r != null))
@@ -25,14 +27,12 @@ const worst = computed(() =>
   }, null),
 )
 
-const crashedCount = (g: GroupView) => processCards(g).filter((c) => c.status === 'crashed').length
-const liveMembers = (g: GroupView) => g.members.filter((m) => m.status !== 'joining').length
+const stalledCount = (g: GroupView) => processCards(g).filter((c) => c.status === 'stalled').length
 const chain = (g: GroupView) => {
-  const sinks = g.flow?.topics.filter((t) => t.kind === 'sink').map((t) => t.name) ?? []
-  const layout = pipelineLayout(g.topology.subtopologies, sinks)
+  const layout = pipelineLayout(g.topology.subtopologies, [])
   if (!layout.steps.length) return '—'
   const name = (id: string) => g.topology.subtopologies.find((s) => s.id === id)?.name ?? id
-  return [layout.sources.join(' + '), ...layout.steps.map((s) => name(s.id)), sinks.join(' + ')].filter(Boolean).join(' → ')
+  return [layout.sources.join(' + '), ...layout.steps.map((s) => name(s.id))].filter(Boolean).join(' → ')
 }
 const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.groupId })
 </script>
@@ -52,7 +52,7 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
         </div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.processes') }}</span><span class="sc-metric__value">{{ processTotal }}</span>
-          <span v-if="crashed.length" class="sc-metric__note bad">{{ tr('metric.crashed', { n: crashed.length }) }}</span>
+          <span v-if="stalled.length" class="sc-metric__note warn">{{ tr('metric.stalled', { n: stalled.length }) }}</span>
         </div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.inputRate') }}</span>
@@ -65,12 +65,14 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
         </div>
       </div>
 
-      <div v-for="{ g, c } in crashed" :key="`${g.groupId}/${c.processId}`" class="alert" role="alert" data-testid="crash-alert">
-        <span class="sc-badge sc-badge--fenced">{{ tr('status.crashed') }}</span>
-        <span class="alert-text">
-          <span class="sc-mono">{{ g.groupId }}</span> ·
-          {{ c.silentMs ? tr('alert.crashedSince', { process: c.processId, s: Math.round(c.silentMs / 1000) }) : tr('alert.crashed', { process: c.processId }) }}
-        </span>
+      <div v-for="{ g, f } in fenced" :key="`fenced-${g.groupId}/${f.processId}`" class="alert" role="alert" data-testid="fenced-alert">
+        <span class="sc-badge sc-badge--fenced">{{ tr('status.fenced') }}</span>
+        <span class="alert-text"><span class="sc-mono">{{ g.groupId }}</span> · {{ tr('alert.fenced', { process: f.processId, s: Math.round(f.stalledMs / 1000) }) }}</span>
+        <button class="sc-button sc-button--small" @click="open(g)">{{ tr('alert.viewProcesses') }}</button>
+      </div>
+      <div v-for="{ g, c } in stalled" :key="`stalled-${g.groupId}/${c.processId}`" class="alert warn-alert" role="alert" data-testid="stalled-alert">
+        <span class="sc-badge sc-badge--revoking">{{ tr('status.stalled') }}</span>
+        <span class="alert-text"><span class="sc-mono">{{ g.groupId }}</span> · {{ tr('alert.stalled', { process: c.processId, s: Math.round((c.stalledMs ?? 0) / 1000) }) }}</span>
         <button class="sc-button sc-button--small" @click="open(g)">{{ tr('alert.viewProcesses') }}</button>
       </div>
 
@@ -91,8 +93,8 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
             <tr v-for="g in groups" :key="g.groupId" :data-testid="`row-${g.groupId}`" tabindex="0" @click="open(g)" @keydown.enter="open(g)">
               <td class="sc-group-name">{{ g.groupId }}</td>
               <td><span :class="badgeClass(g.state)">{{ g.state }}</span></td>
-              <td class="sc-num" :class="{ 'sc-bad': crashedCount(g) }">
-                {{ liveMembers(g) }}<template v-if="crashedCount(g)"> · {{ tr('metric.crashed', { n: crashedCount(g) }) }}</template>
+              <td class="sc-num" :class="{ 'sc-warn': stalledCount(g) }">
+                {{ g.members.length }}<template v-if="stalledCount(g)"> · {{ tr('metric.stalled', { n: stalledCount(g) }) }}</template>
               </td>
               <td class="sc-num">{{ formatRate(g.flow?.inputRate) }}</td>
               <td class="sc-num" :class="{ 'sc-warn': isBehind(g) }">{{ formatCount(maxLag(g)) }}</td>
@@ -112,7 +114,7 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
 .head h1 { margin: 0; font-size: 28px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; }
 .empty, .hint { margin: 0; color: var(--ink-muted); }
 .hint { font-size: 13px; }
-.bad { color: var(--state-fenced); }
+.warn-alert { border-color: var(--state-revoking); background: var(--state-revoking-bg); color: var(--state-revoking); }
 .warn { color: var(--state-revoking); }
 .alert {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
