@@ -248,6 +248,8 @@ export class StreamsGroup {
         msSinceHeartbeat: now - m.lastHeartbeat,
       })),
       events: this.events,
+      flow: null,
+      configs: [],
     }
   }
 }

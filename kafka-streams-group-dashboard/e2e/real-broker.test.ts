@@ -69,6 +69,7 @@ describe.skipIf(!process.env.E2E)('real broker', () => {
     expect(Object.keys(g)).toEqual([
       'groupId', 'state', 'groupEpoch', 'targetAssignmentEpoch', 'topologyEpoch',
       'numStandbyReplicas', 'subtopologies', 'members',
+      'topics', 'committed', 'configs', // added by Spec 002 Behavior 2
     ])
     expect(g.subtopologies.map((s: { id: string; partitions: number }) => [s.id, s.partitions])).toEqual([['0', 4], ['1', 4]])
     expect(Object.keys(g.members[0])).toEqual(['memberId', 'memberEpoch', 'processId', 'clientId', 'assignment', 'targetAssignment'])
@@ -137,6 +138,57 @@ describe.skipIf(!process.env.E2E)('real broker', () => {
     await backend.handle({ type: 'stopProcess', groupId: GROUP, processId: leaving })
     const ms = await waitFor('member left', (g) => !labels(g).includes(leaving), 9_000)
     console.log(`RB8 measured: left ${ms} ms after SIGTERM`)
+  }, TIMEOUT)
+
+  test('CS5: inspector reports topics by kind and group configs with their source', async () => {
+    await startProcesses(1)
+    const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=${GROUP}`)).json()).groups
+    const kinds = Object.fromEntries(g.topics.map((t: { name: string; kind: string }) => [t.name, t.kind]))
+    expect(kinds).toMatchObject({
+      'text-lines': 'source',
+      'word-count-counts-store-repartition': 'repartition',
+      'word-count-counts-store-changelog': 'changelog',
+      'word-counts': 'sink',
+    })
+    const configs = Object.fromEntries(g.configs.map((c: { key: string; source: string }) => [c.key, c.source]))
+    expect(Object.keys(configs).sort()).toEqual(['streams.heartbeat.interval.ms', 'streams.num.standby.replicas', 'streams.session.timeout.ms'])
+    expect(configs['streams.session.timeout.ms']).toBe('group')
+  }, TIMEOUT)
+
+  test('CS6: records flow end to end within 30 s', async () => {
+    await startProcesses(1)
+    const sinkEnd = () => view().flow?.topics.find((t) => t.name === 'word-counts')?.endOffset ?? null
+    await waitFor('sink offset known', () => sinkEnd() !== null, 10_000)
+    const start = sinkEnd()!
+    const ms = await waitFor(
+      'text-lines rate > 0 and word-counts growing',
+      (g) => (g.flow?.topics.find((t) => t.name === 'text-lines')?.rate ?? 0) > 0 && (sinkEnd() ?? 0) > start,
+      30_000,
+    )
+    console.log(`CS6 measured: flow seen ${ms} ms after STABLE`)
+  }, TIMEOUT)
+
+  test('CS8: killing the only process makes subtopology 0 lag grow within 15 s', async () => {
+    await startProcesses(1)
+    const lag = () => view().flow?.lag['0'] ?? null
+    await waitFor('lag known', () => lag() !== null, 10_000)
+    const before = lag()!
+    const [victim] = labels(view())
+    await backend.handle({ type: 'killProcess', groupId: GROUP, processId: victim })
+    const ms = await waitFor('lag grows', () => (lag() ?? 0) > before + 10, 15_000)
+    console.log(`CS8 measured: lag ${before} → ${lag()} in ${ms} ms`)
+  }, TIMEOUT)
+
+  test('CS11: GET /groups for three groups answers within 1000 ms', async () => {
+    let slowest = 0
+    for (let i = 0; i < 20; i++) {
+      const start = performance.now()
+      const res = await fetch(`${INSPECTOR}/groups?ids=word-count,order-enrichment,page-view-sessions`)
+      await res.json()
+      slowest = Math.max(slowest, performance.now() - start)
+    }
+    console.log(`CS11 measured: slowest ${slowest.toFixed(1)} ms of 20`)
+    expect(slowest).toBeLessThan(1000)
   }, TIMEOUT)
 
   test('RB17: after a broker restart an empty group is EMPTY and other groups are still described', async () => {

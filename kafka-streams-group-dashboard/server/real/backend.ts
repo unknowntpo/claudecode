@@ -6,6 +6,8 @@ import type { Subprocess } from 'bun'
 import type { ClientMessage, LogEvent, Snapshot } from '../../shared/types'
 import type { Backend } from '../backend'
 import { APPS } from '../topologies'
+import type { GroupFlow } from '../../shared/types'
+import { computeFlow, withoutRates } from './flow'
 import { diffEvents, type InspectorGroup, processLabel, toGroupView } from './mapping'
 
 const DEFAULT_BIN = `${import.meta.dir}/../../streams-app/build/install/streams-app/bin/streams-app`
@@ -38,6 +40,9 @@ export class RealBackend implements Backend {
   private labelSeq = new Map<string, number>()
   private groups = new Map<string, InspectorGroup>()
   private events = new Map<string, LogEvent[]>()
+  private flows = new Map<string, GroupFlow>()
+  /** End offsets of the last successful poll, for rates (Spec 002 Behavior 3). */
+  private lastOffsets: { at: number; byGroup: Map<string, Record<string, number>> } | null = null
   private error?: string = 'starting inspector…'
   private paused = false
   private lastPoll = 0
@@ -77,6 +82,7 @@ export class RealBackend implements Backend {
             killed: new Set(mine.filter((p) => p.killed).map((p) => p.label)),
           },
           this.events.get(id) ?? [],
+          this.flows.get(id) ?? null,
         )
       }),
     }
@@ -128,6 +134,14 @@ export class RealBackend implements Backend {
       })
       if (!res.ok) throw new Error(`inspector HTTP ${res.status}`)
       const { groups } = (await res.json()) as { groups: InspectorGroup[] }
+      const now = Date.now()
+      const byGroup = new Map<string, Record<string, number>>()
+      for (const g of groups) {
+        const previous = this.lastOffsets?.byGroup.get(g.groupId) ?? null
+        this.flows.set(g.groupId, computeFlow(g, previous, this.lastOffsets ? now - this.lastOffsets.at : 0))
+        byGroup.set(g.groupId, Object.fromEntries((g.topics ?? []).flatMap((t) => (t.endOffset === undefined ? [] : [[t.name, t.endOffset]]))))
+      }
+      this.lastOffsets = { at: now, byGroup }
       for (const g of groups) {
         for (const e of diffEvents(this.groups.get(g.groupId), g)) this.log(g.groupId, e.kind, e.message)
         this.groups.set(g.groupId, g)
@@ -135,6 +149,9 @@ export class RealBackend implements Backend {
       }
       this.error = undefined
     } catch (err) {
+      // CS7: rates are unknown until two good polls in a row
+      this.lastOffsets = null
+      for (const [id, flow] of this.flows) this.flows.set(id, withoutRates(flow))
       this.error = `cannot reach the inspector / broker (${(err as Error).message}). Is \`docker compose up -d\` running?`
     } finally {
       this.polling = false

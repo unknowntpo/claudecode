@@ -1,0 +1,11 @@
+CS1: SURVIVED (shared/pipeline.ts)
+CS2: CAUGHT (server/real/flow.ts)
+CS3: CAUGHT (server/real/flow.ts)
+CS4: CAUGHT (shared/pipeline.ts)
+CS7: CAUGHT (server/real/backend.ts)
+CS9: CAUGHT (server/real/flow.ts)
+CS10: SURVIVED (server/real/backend.ts)
+CS1: CAUGHT (shared/pipeline.ts)
+CS10: CAUGHT (server/real/flow.ts)
+
+Note: the first CS1 and CS10 mutants survived; CS1 got a row with ids opposite to the data flow, CS10 a computeFlow first-poll test. Rerun above: both CAUGHT.

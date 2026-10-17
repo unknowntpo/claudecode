@@ -59,6 +59,31 @@ export interface LogEvent {
   message: string
 }
 
+export type TopicKind = 'source' | 'repartition' | 'changelog' | 'sink'
+
+export interface TopicFlow {
+  name: string
+  kind: TopicKind
+  endOffset: number | null
+  /** Records per second since the previous poll; null when unknown (Spec 002 Behavior 3). */
+  rate: number | null
+}
+
+export interface GroupFlow {
+  topics: TopicFlow[]
+  /** Lag per subtopology id; null when unknown. */
+  lag: Record<string, number | null>
+  /** Sum of the source topics' rates; null when any is unknown. */
+  inputRate: number | null
+}
+
+export interface ConfigEntry {
+  key: string
+  /** null when the broker reports no entry for the key */
+  value: string | null
+  source: 'group' | 'default'
+}
+
 export interface GroupView {
   groupId: string
   description: string
@@ -71,6 +96,9 @@ export interface GroupView {
   tasks: TaskId[]
   members: MemberView[]
   events: LogEvent[]
+  /** Real mode only; the simulator has no records. */
+  flow: GroupFlow | null
+  configs: ConfigEntry[]
 }
 
 export interface Snapshot {

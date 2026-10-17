@@ -40,6 +40,29 @@ describe('RealBackend failures', () => {
     expect(snap.groups[0].groupEpoch).toBe(2)
   })
 
+  test('CS7: a failed poll turns every rate into null, never 0', async () => {
+    let up = true
+    let offset = 100
+    const inspector = Bun.serve({
+      port: 0,
+      fetch: () =>
+        up
+          ? Response.json({ groups: [{ ...group, topics: [{ name: 'text-lines', kind: 'source', endOffset: (offset += 10) }] }] })
+          : new Response('down', { status: 500 }),
+    })
+    backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    await backend.tick({ force: true })
+    await Bun.sleep(20)
+    await backend.tick({ force: true })
+    const rate = () => backend!.snapshot().groups[0].flow?.topics[0].rate
+    expect(rate()).toBeGreaterThan(0) // positive control: two good polls give a rate
+    up = false
+    await backend.tick({ force: true })
+    expect(rate()).toBeNull()
+    expect(backend.snapshot().groups[0].flow?.inputRate).toBeNull()
+    inspector.stop(true)
+  })
+
   test('RB10: an inspector that accepts but never answers is reported within the poll timeout', async () => {
     const hung = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })
     backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${hung.port}`, pollTimeoutMs: 200 })

@@ -1,0 +1,89 @@
+/* Streams Console — generated from tokens.json (design system: https://claude.ai/artifact/FBr69Pi42psrJXtz6wSZxy). Do not edit by hand. */
+:root {
+  --surface: #f4f5f7;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eceef2;
+  --line: #d9dde4;
+  --line-strong: #838b98;
+  --ink: #161b22;
+  --ink-muted: #58606d;
+  --accent: #4f3fc0;
+  --on-accent: #ffffff;
+  --focus-ring: var(--accent);
+  --state-active: #0b5f9e;
+  --state-active-bg: #dde9f6;
+  --state-standby: #0a6f52;
+  --state-standby-bg: #d9f2e8;
+  --state-warmup: #963b75;
+  --state-warmup-bg: #f7e3ef;
+  --state-revoking: #8a5300;
+  --state-revoking-bg: #faecd5;
+  --state-fenced: #b02f1a;
+  --state-fenced-bg: #fbe2dc;
+  --state-idle: #646c79;
+  --shadow-popover: 0 6px 20px rgba(22, 27, 34, 0.14);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-cell: 3px;
+  --radius-panel: 6px;
+  --radius-pill: 999px;
+  --font-sans: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --surface: #0e1116;
+  --surface-raised: #161a21;
+  --surface-sunken: #0a0c10;
+  --line: #2a303a;
+  --line-strong: #646d7b;
+  --ink: #e6e9ee;
+  --ink-muted: #9aa3b0;
+  --accent: #a99cff;
+  --on-accent: #0e1116;
+  --focus-ring: var(--accent);
+  --state-active: #5aa9f0;
+  --state-active-bg: #0f2236;
+  --state-standby: #3fc495;
+  --state-standby-bg: #0d2a20;
+  --state-warmup: #e48fc6;
+  --state-warmup-bg: #33182a;
+  --state-revoking: #f2ad3d;
+  --state-revoking-bg: #33240b;
+  --state-fenced: #ff8a73;
+  --state-fenced-bg: #3a1710;
+  --state-idle: #8b94a1;
+  --shadow-popover: 0 6px 20px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #0e1116;
+  --surface-raised: #161a21;
+  --surface-sunken: #0a0c10;
+  --line: #2a303a;
+  --line-strong: #646d7b;
+  --ink: #e6e9ee;
+  --ink-muted: #9aa3b0;
+  --accent: #a99cff;
+  --on-accent: #0e1116;
+  --focus-ring: var(--accent);
+  --state-active: #5aa9f0;
+  --state-active-bg: #0f2236;
+  --state-standby: #3fc495;
+  --state-standby-bg: #0d2a20;
+  --state-warmup: #e48fc6;
+  --state-warmup-bg: #33182a;
+  --state-revoking: #f2ad3d;
+  --state-revoking-bg: #33240b;
+  --state-fenced: #ff8a73;
+  --state-fenced-bg: #3a1710;
+  --state-idle: #8b94a1;
+  --shadow-popover: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}

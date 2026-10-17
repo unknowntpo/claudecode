@@ -1,9 +1,10 @@
 // Pure mapping from the inspector's StreamsGroupDescribe JSON (see docs/specs/001-real-broker/spec.md)
 // to the dashboard's GroupView, plus event derivation by diffing two consecutive polls.
 
-import type { Assignment, GroupState, GroupView, LogEvent, MemberState, MemberView, TaskId } from '../../shared/types'
+import type { Assignment, ConfigEntry, GroupFlow, GroupState, GroupView, LogEvent, MemberState, MemberView, TaskId } from '../../shared/types'
 import { compareTaskIds } from '../assignor'
 import type { AppInfo } from '../topologies'
+import type { InspectorTopic } from './flow'
 
 export interface InspectorAssignment {
   active: TaskId[]
@@ -38,6 +39,10 @@ export interface InspectorGroup {
   numStandbyReplicas: number
   subtopologies: InspectorSubtopology[]
   members: InspectorMember[]
+  /** Spec 002 additions; absent from an older inspector. */
+  topics?: InspectorTopic[]
+  committed?: Record<string, number>
+  configs?: ConfigEntry[]
 }
 
 export type GroupEvent = Pick<LogEvent, 'kind' | 'message'>
@@ -83,6 +88,7 @@ export function toGroupView(
   info: AppInfo | undefined,
   ctx: ProcessContext,
   events: LogEvent[],
+  flow: GroupFlow | null = null,
 ): GroupView {
   const members: MemberView[] = g.members.map((m) => {
     const label = processLabel(g.groupId, m)
@@ -123,7 +129,10 @@ export function toGroupView(
 
   const subtopologies = g.subtopologies.map((s) => ({
     id: s.id,
-    name: s.repartitionSinkTopics.length ? 'repartition' : s.stateChangelogTopics.length ? 'stateful' : 'stateless',
+    // the app's own name for the subtopology when the ids match its static description
+    name:
+      info?.topology.subtopologies.find((x) => x.id === s.id)?.name ??
+      (s.repartitionSinkTopics.length ? 'repartition' : s.stateChangelogTopics.length ? 'stateful' : 'stateless'),
     sourceTopics: s.sourceTopics,
     repartitionSourceTopics: s.repartitionSourceTopics,
     repartitionSinkTopics: s.repartitionSinkTopics,
@@ -148,6 +157,8 @@ export function toGroupView(
     tasks: subtopologies.flatMap((s) => Array.from({ length: s.partitions }, (_, p) => `${s.id}_${p}`)),
     members,
     events,
+    flow,
+    configs: g.configs ?? [],
   }
 }
 

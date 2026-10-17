@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.TreeMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +23,13 @@ import java.util.concurrent.Executors;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.AlterConfigOp;
+import org.apache.kafka.clients.admin.Config;
 import org.apache.kafka.clients.admin.ConfigEntry;
+import org.apache.kafka.clients.admin.ListStreamsGroupOffsetsResult;
+import org.apache.kafka.clients.admin.ListStreamsGroupOffsetsSpec;
+import org.apache.kafka.clients.admin.OffsetSpec;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.StreamsGroupDescription;
 import org.apache.kafka.clients.admin.StreamsGroupMemberAssignment;
@@ -47,7 +55,19 @@ final class Inspector {
         TOPICS.put("orders", 3);
         TOPICS.put("customers", 3);
         TOPICS.put("page-views", 6);
+        // Spec 002: sink topics, 1 partition
+        TOPICS.put("word-counts", 1);
+        TOPICS.put("enriched-orders", 1);
+        TOPICS.put("user-sessions", 1);
     }
+    /** Spec 002: sink topics per app (static; the streams group description has no sinks). */
+    static final Map<String, List<String>> SINKS = Map.of(
+            "word-count", List.of("word-counts"),
+            "order-enrichment", List.of("enriched-orders"),
+            "page-view-sessions", List.of("user-sessions"));
+    /** Spec 002: group configs reported in {@code configs}, in this order. */
+    static final List<String> CONFIG_KEYS = List.of(
+            "streams.session.timeout.ms", "streams.heartbeat.interval.ms", STANDBY_KEY);
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private final Admin admin;
@@ -65,6 +85,7 @@ final class Inspector {
         Admin admin = Admin.create(p);
         createTopics(admin);
         configureGroups(admin);
+        DemoProducer.start();
         Inspector inspector = new Inspector(admin);
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -105,9 +126,7 @@ final class Inspector {
             if (method.equals("GET") && (path.equals("/groups") || path.equals("/groups/"))) {
                 List<String> ids = Arrays.stream(q.getOrDefault("ids", "").split(","))
                         .map(String::trim).filter(s -> !s.isEmpty()).toList();
-                List<Object> groups = new ArrayList<>();
-                for (String id : ids) groups.add(describe(id));
-                send(ex, 200, JSON.writeValueAsBytes(Map.of("groups", groups)));
+                send(ex, 200, JSON.writeValueAsBytes(Map.of("groups", describe(ids))));
             } else if (method.equals("POST") && path.matches("/groups/[^/]+/standby")) {
                 String id = path.split("/")[2];
                 int n = Integer.parseInt(q.getOrDefault("value", ""));
@@ -155,26 +174,155 @@ final class Inspector {
 
     // ---- Admin → contract JSON ----
 
-    Map<String, Object> describe(String groupId) throws Exception {
-        Map<String, Object> g = new LinkedHashMap<>();
-        g.put("groupId", groupId);
-        StreamsGroupDescription d;
-        try {
-            d = admin.describeStreamsGroups(List.of(groupId)).all().get().get(groupId);
-        } catch (ExecutionException e) {
-            if (!(e.getCause() instanceof GroupIdNotFoundException) && !missingTopology(e.getCause())) throw e;
-            d = null;
+    /**
+     * Describes the groups with a fixed number of batched Admin calls, whatever the number of groups:
+     * describeStreamsGroups, listStreamsGroupOffsets and describeConfigs in parallel, then describeTopics,
+     * then one listOffsets for every partition of every topic.
+     */
+    List<Object> describe(List<String> ids) throws Exception {
+        if (ids.isEmpty()) return List.of();
+        var describeF = admin.describeStreamsGroups(ids).describedGroups();
+        Map<String, ListStreamsGroupOffsetsSpec> offsetSpecs = new LinkedHashMap<>();
+        for (String id : ids) offsetSpecs.put(id, new ListStreamsGroupOffsetsSpec());
+        var committedF = admin.listStreamsGroupOffsets(offsetSpecs);
+        List<ConfigResource> resources = ids.stream()
+                .map(id -> new ConfigResource(ConfigResource.Type.GROUP, id)).toList();
+        var configsF = admin.describeConfigs(resources).all();
+
+        Map<String, StreamsGroupDescription> descs = new LinkedHashMap<>();
+        Map<String, List<String[]>> topicsByGroup = new LinkedHashMap<>(); // {name, kind}
+        Set<String> allTopics = new LinkedHashSet<>();
+        for (String id : ids) {
+            StreamsGroupDescription d;
+            try {
+                d = describeF.get(id).get();
+            } catch (ExecutionException e) {
+                if (!(e.getCause() instanceof GroupIdNotFoundException) && !missingTopology(e.getCause())) throw e;
+                d = null;
+            }
+            // an unknown group is reported either as GroupIdNotFound or as a DEAD placeholder with epoch -1
+            if (d != null && d.groupState() == GroupState.DEAD) d = null;
+            descs.put(id, d);
+            List<String[]> topics = groupTopics(id, d);
+            topicsByGroup.put(id, topics);
+            for (String[] t : topics) allTopics.add(t[0]);
+            if (d != null) for (var s : d.subtopologies()) allTopics.addAll(s.repartitionSourceTopics().keySet());
         }
-        // an unknown group is reported either as GroupIdNotFound or as a DEAD placeholder with epoch -1
-        if (d != null && d.groupState() == GroupState.DEAD) d = null;
-        g.put("state", d == null ? "EMPTY" : d.groupState().name());
-        g.put("groupEpoch", d == null ? 0 : d.groupEpoch());
-        g.put("targetAssignmentEpoch", d == null ? 0 : d.targetAssignmentEpoch());
-        g.put("topologyEpoch", d == null ? 0 : d.topologyEpoch());
-        g.put("numStandbyReplicas", standbyReplicas(groupId));
-        g.put("subtopologies", d == null ? List.of() : subtopologies(d.subtopologies()));
-        g.put("members", d == null ? List.of() : d.members().stream().map(Inspector::member).toList());
-        return g;
+
+        // partition counts; a topic that does not exist yet is absent from the map
+        Map<String, Integer> partitions = new LinkedHashMap<>();
+        for (var e : admin.describeTopics(allTopics).topicNameValues().entrySet()) {
+            try {
+                TopicDescription td = e.getValue().get();
+                partitions.put(e.getKey(), td.partitions().size());
+            } catch (ExecutionException ignored) {
+                // not created yet
+            }
+        }
+        Map<String, Long> endOffsets = endOffsets(partitions);
+        Map<ConfigResource, Config> configs = configsF.get();
+
+        List<Object> out = new ArrayList<>();
+        for (String id : ids) {
+            StreamsGroupDescription d = descs.get(id);
+            Config config = configs.get(new ConfigResource(ConfigResource.Type.GROUP, id));
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("groupId", id);
+            g.put("state", d == null ? "EMPTY" : d.groupState().name());
+            g.put("groupEpoch", d == null ? 0 : d.groupEpoch());
+            g.put("targetAssignmentEpoch", d == null ? 0 : d.targetAssignmentEpoch());
+            g.put("topologyEpoch", d == null ? 0 : d.topologyEpoch());
+            g.put("numStandbyReplicas", standbyReplicas(config));
+            g.put("subtopologies", d == null ? List.of() : subtopologies(d.subtopologies(), partitions));
+            g.put("members", d == null ? List.of() : d.members().stream().map(Inspector::member).toList());
+            List<Object> topics = new ArrayList<>();
+            for (String[] t : topicsByGroup.get(id)) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", t[0]);
+                m.put("kind", t[1]);
+                Long end = endOffsets.get(t[0]);
+                if (end != null) m.put("endOffset", end);
+                topics.add(m);
+            }
+            g.put("topics", topics);
+            g.put("committed", committed(committedF, id, topicsByGroup.get(id)));
+            g.put("configs", configs(config));
+            out.add(g);
+        }
+        return out;
+    }
+
+    /** {name, kind} in order source, repartition, changelog, sink; deduplicated by name. */
+    private static List<String[]> groupTopics(String groupId, StreamsGroupDescription d) {
+        Map<String, String> kinds = new LinkedHashMap<>();
+        if (d != null) {
+            for (var s : d.subtopologies()) for (String t : s.sourceTopics()) kinds.putIfAbsent(t, "source");
+            for (var s : d.subtopologies()) {
+                for (String t : s.repartitionSourceTopics().keySet()) kinds.putIfAbsent(t, "repartition");
+                for (String t : s.repartitionSinkTopics()) kinds.putIfAbsent(t, "repartition");
+            }
+            for (var s : d.subtopologies())
+                for (String t : s.stateChangelogTopics().keySet()) kinds.putIfAbsent(t, "changelog");
+        }
+        for (String t : SINKS.getOrDefault(groupId, List.of())) kinds.putIfAbsent(t, "sink");
+        List<String[]> out = new ArrayList<>();
+        kinds.forEach((name, kind) -> out.add(new String[] {name, kind}));
+        return out;
+    }
+
+    /** Sum of latest offsets per topic, one listOffsets call for all partitions. */
+    private Map<String, Long> endOffsets(Map<String, Integer> partitions) throws Exception {
+        Map<TopicPartition, OffsetSpec> req = new LinkedHashMap<>();
+        partitions.forEach((t, n) -> {
+            for (int p = 0; p < n; p++) req.put(new TopicPartition(t, p), OffsetSpec.latest());
+        });
+        Map<String, Long> sums = new LinkedHashMap<>();
+        if (req.isEmpty()) return sums;
+        var result = admin.listOffsets(req);
+        for (TopicPartition tp : req.keySet()) {
+            try {
+                long off = result.partitionResult(tp).get().offset();
+                sums.merge(tp.topic(), off, Long::sum);
+            } catch (ExecutionException e) {
+                // a partition that vanished between describeTopics and listOffsets: drop the whole topic
+                sums.put(tp.topic(), null);
+            }
+        }
+        sums.values().removeIf(java.util.Objects::isNull);
+        return sums;
+    }
+
+    /** Committed offsets summed per topic, for the group's source and repartition topics only. */
+    private static Map<String, Long> committed(ListStreamsGroupOffsetsResult r, String groupId, List<String[]> topics)
+            throws Exception {
+        Set<String> wanted = new HashSet<>();
+        for (String[] t : topics) if (t[1].equals("source") || t[1].equals("repartition")) wanted.add(t[0]);
+        Map<TopicPartition, OffsetAndMetadata> offsets;
+        try {
+            offsets = r.partitionsToOffsetAndMetadata(groupId).get();
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof GroupIdNotFoundException) return Map.of();
+            throw e;
+        }
+        Map<String, Long> out = new TreeMap<>();
+        for (var e : offsets.entrySet()) {
+            if (e.getValue() == null || !wanted.contains(e.getKey().topic())) continue;
+            out.merge(e.getKey().topic(), e.getValue().offset(), Long::sum);
+        }
+        return out;
+    }
+
+    private static List<Object> configs(Config config) {
+        List<Object> out = new ArrayList<>();
+        for (String key : CONFIG_KEYS) {
+            ConfigEntry e = config == null ? null : config.get(key);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("key", key);
+            m.put("value", e == null ? null : e.value());
+            m.put("source", e != null && e.source() == ConfigEntry.ConfigSource.DYNAMIC_GROUP_CONFIG ? "group" : "default");
+            out.add(m);
+        }
+        return out;
     }
 
     /** Kafka 4.1: after a broker restart, a group without members is described without topology (Spec 001 RB17). */
@@ -182,27 +330,13 @@ final class Inspector {
         return t instanceof IllegalStateException && String.valueOf(t.getMessage()).contains("Topology information is missing");
     }
 
-    private int standbyReplicas(String groupId) throws Exception {
-        var resource = new ConfigResource(ConfigResource.Type.GROUP, groupId);
-        ConfigEntry e = admin.describeConfigs(List.of(resource)).all().get().get(resource).get(STANDBY_KEY);
+    private static int standbyReplicas(Config config) {
+        ConfigEntry e = config == null ? null : config.get(STANDBY_KEY);
         return e == null || e.value() == null ? 0 : Integer.parseInt(e.value());
     }
 
-    private List<Object> subtopologies(Collection<StreamsGroupSubtopologyDescription> subs) throws Exception {
-        Set<String> names = new HashSet<>();
-        for (var s : subs) {
-            names.addAll(s.sourceTopics());
-            names.addAll(s.repartitionSourceTopics().keySet());
-        }
-        Map<String, Integer> partitions = new LinkedHashMap<>();
-        for (var e : admin.describeTopics(names).topicNameValues().entrySet()) {
-            try {
-                TopicDescription td = e.getValue().get();
-                partitions.put(e.getKey(), td.partitions().size());
-            } catch (ExecutionException ignored) {
-                // not created yet: fall back to the partition count in the topology description
-            }
-        }
+    private static List<Object> subtopologies(Collection<StreamsGroupSubtopologyDescription> subs,
+                                              Map<String, Integer> partitions) {
         List<Object> out = new ArrayList<>();
         for (var s : subs) {
             int max = 0;

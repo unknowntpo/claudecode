@@ -18,6 +18,9 @@ that alters behavior.
 | --- | --- | --- |
 | Inspector `GET /groups?ids=` | `streams-app/src/main/java/ksgd/Inspector.java` | RB1, RB2, RB17 |
 | Inspector `POST /groups/<id>/standby` | same | RB5 |
+| Demo producer + sink topics | `streams-app/src/main/java/ksgd/DemoProducer.java` | CS6, CS8 |
+| Flow math (rates, lag) | `server/real/flow.ts` | CS2, CS3, CS7, CS9, CS10 |
+| Pipeline layout, node filter | `shared/pipeline.ts` | CS1, CS4 |
 | Group configs (session timeout 10 s, heartbeat 2 s) | `Inspector.configureGroups` | RB7, RB13 |
 | `streams-app run` (one process, stdin `add-thread`, SIGTERM leave) | `streams-app/src/main/java/ksgd/StreamsRunner.java` | RB3, RB4, RB8 |
 | Process manager + polling | `server/real/backend.ts` | RB3–RB5, RB7–RB11, RB13 |
@@ -25,14 +28,21 @@ that alters behavior.
 | Coordinator log events | `server/real/mapping.ts` (`diffEvents`) | RB15 |
 | Simulator | `server/sim.ts`, `server/coordinator.ts`, `server/assignor.ts` | `server/coordinator.test.ts` |
 
-## UI
+## UI (Spec 002, Streams Console design system)
 
 | Element | Selector | Data | Covered by |
 | --- | --- | --- | --- |
 | Mode label | `[data-testid=mode]` | `snapshot.mode` | — |
 | Error banner | `[data-testid=error-banner]` | `snapshot.error` | RB14 |
-| Standby selector note | `[data-testid=standby-note]` | real mode only | RB16 |
-| Group tabs | `nav button` | `snapshot.groups[].state` | — |
-| Process header: `+ thread`, `stop`, `kill` | `th.process button` | `addMember` / `stopProcess` / `killProcess` | RB4, RB7, RB8 |
-| Matrix cell | `td i.active`, `.standby`, `.warmup`, `.target`, `.revoke` | member assignment / target / pending revocation | RB6 |
-| Coordinator log | `section.log li` | `group.events` | RB15 |
+| Group tabs | `nav[aria-label="Streams groups"] button` | `snapshot.groups[].state` | — |
+| Group state | `[data-testid=group-state]` | `group.state` | CS12 |
+| Standby note | `[data-testid=standby-note]` | real mode only | RB16 |
+| Input rate | `[data-testid=input-rate]` | `group.flow.inputRate` | CS2, CS12 |
+| Pipeline node | `[data-testid=node-<id>]` (`aria-selected`) | subtopology, tasks, store | CS1, CS4 |
+| Node lag | `[data-testid=lag-<id>]` | `group.flow.lag[id]` | CS3, CS8 |
+| Edge label | `.sc-edge__label` | topic names, rate | CS2, CS6 |
+| Inspector tabs | `[role=tab]` Tasks / Configuration / Log | — | CS4 |
+| Matrix cell | `.sc-chip--active`, `--standby`, `--warmup`, `--target`, `--revoking` | assignment / target / revocation | RB6 |
+| Process actions | `.sc-matrix thead .sc-button` (`+ thread`, `stop`, `kill`) | `addMember` / `stopProcess` / `killProcess` | RB4, RB7, RB8 |
+| Config table | `.sc-config` | `group.configs` | CS5 |
+| Coordinator log | `.sc-log li` | `group.events` | RB15 |

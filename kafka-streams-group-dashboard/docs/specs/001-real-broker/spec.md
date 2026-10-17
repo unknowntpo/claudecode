@@ -162,7 +162,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 `bun run test:e2e`, driving the real `RealBackend` in-process.
 
 ### Behavior
-- RB1: inspector running, word-count has one process → `GET /groups?ids=word-count` → 200 with the Example's fields, task ids `<sub>_<partition>` → test asserts shape.
+- RB1: (contract extended by Spec 002 with `topics`, `committed`, `configs`) inspector running, word-count has one process → `GET /groups?ids=word-count` → 200 with the Example's fields, task ids `<sub>_<partition>` → test asserts shape.
 - RB2: inspector running → `GET /groups?ids=no-such-group` → that group has `state: "EMPTY"`, no members, no subtopologies.
 - RB3: no processes → start two word-count processes, wait for STABLE → each of `0_0..0_3`, `1_0..1_3` is active on exactly one member, and both processes own at least one task.
 - RB4: one process → `+ thread` → two members with the same process label within 20 s.
