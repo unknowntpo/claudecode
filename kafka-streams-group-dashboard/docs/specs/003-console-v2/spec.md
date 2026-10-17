@@ -60,7 +60,11 @@ The canvas's four artboards are the example, with this live scenario (values fro
    remembered per viewer (`localStorage`, best effort) and defaults to `zh-Hant` when the browser prefers
    Chinese, else `en`. The root gets `lang`.
 8. **Palette and type**: `src/styles/tokens.css` and `console.css` regenerated from design system v2; light
-   and dark follow `prefers-color-scheme`.
+   and dark follow `prefers-color-scheme` unless the viewer picks a theme.
+9. **Theme** (human, 2026-10-17: "ok go" to a System / Light / Dark switch): a segmented control at the
+   sidebar foot next to the language toggle, options System, Light, Dark (系統、淺色、深色). System sets no
+   `data-theme` on `<html>`; Light and Dark set `data-theme="light"` / `"dark"`. The choice is remembered per
+   viewer (`localStorage`, best effort); an unknown stored value or storage that throws means System.
 
 ## Simplification review
 
@@ -91,10 +95,13 @@ The canvas's four artboards are the example, with this live scenario (values fro
 - CV11: [deploy] no groups or no members → overview and processes show their empty states, not a blank panel.
 - CV12: the killed-at time survives polls: `msSinceHeartbeat` grows between two snapshots of a killed process.
 
+- CV15: theme rows below: stored choice → `data-theme` value; unknown or throwing storage → System.
+
 ### Budget
 - CV13: [measure] production JS ≤ 120 kB gzip (`bun run build`, read the gzip column).
 
 ### Observability
+- CV16: [deploy] the theme switch at the sidebar foot changes the page between light and dark in both languages, and System follows the OS / emulated color scheme again.
 - CV14: [deploy] the verifier renders overview, group, drawer and processes in light and dark, EN and 繁中, against the live stack, and compares them with the canvas.
 
 ### Test plan: order and behind (CV1, CV2)
@@ -117,6 +124,19 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | CV2 | unknown lag |  | - | 5 | ok |
 <!-- test-plan:end -->
 
+### Test plan: theme (CV15)
+
+<!-- test-plan:start src/theme.cases.ts -->
+| id | case | stored | choice | dataTheme |
+| --- | --- | --- | --- | --- |
+| CV15 | nothing stored | (none) | system | (no attribute) |
+| CV15 | light stored | light | light | light |
+| CV15 | dark stored | dark | dark | dark |
+| CV15 | system stored | system | system | (no attribute) |
+| CV15 | unknown value | sepia | system | (no attribute) |
+| CV15 | storage throws | (throws) | system | (no attribute) |
+<!-- test-plan:end -->
+
 ### Test plan: drawer and processes (CV3, CV4)
 
 <!-- test-plan:start src/detail.cases.ts -->
@@ -136,6 +156,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | CV4 | starting before crashed | A/m1 crashed a=0_0 \| C/(starting) joining |  | C joining [(starting): ] \| A crashed [m1: 0_0A] |
 | CV4 | a process with one starting thread is alive | A/m1 alive a=0_0 \| A/(starting) joining |  | A alive [m1: 0_0A] [(starting): ] |
 | CV4 | tasks sort by subtopology, then partition | A/m1 alive a=1_0,0_1 |  | A alive [m1: 0_1A 1_0A] |
+| CV4 | alive processes sort by label | B/m2 alive a=0_1 \| A/m1 alive a=0_0 |  | A alive [m1: 0_0A] \| B alive [m2: 0_1A] |
 | CV4 | two threads in one process | A/m1 alive a=0_0 \| A/m3 alive a=0_1 |  | A alive [m1: 0_0A] [m3: 0_1A] |
 | CV10 | crashed without a known kill time has no duration | B/m2 crashed a=0_0 |  | B crashed [m2: 0_0A] |
 | CV4 | an alive process with a recent heartbeat shows no duration | A/m1 alive a=0_0 ms=1500 |  | A alive [m1: 0_0A] |
@@ -145,4 +166,4 @@ The canvas's four artboards are the example, with this live scenario (values fro
 
 ## Non-goals
 
-- A theme switch; more languages; editing configs beyond standby; per-task lag; charts.
+- More languages; editing configs beyond standby; per-task lag; charts.

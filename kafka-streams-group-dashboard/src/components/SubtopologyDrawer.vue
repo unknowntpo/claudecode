@@ -31,7 +31,7 @@ const inputRate = computed(() => {
       <button class="sc-button sc-button--small" :aria-label="tr('drawer.close')" @click="emit('close')">×</button>
     </div>
     <div class="sc-metrics metrics">
-      <div class="sc-metric"><span class="sc-label">{{ tr('drawer.input') }}</span><span class="sc-metric__value">{{ formatRate(inputRate) }}</span></div>
+      <div class="sc-metric"><span class="sc-label">{{ tr('drawer.input') }}</span><span class="sc-metric__value">{{ inputRate === null ? '—' : formatRate(inputRate).replace(' rec/s', '') }}<small v-if="inputRate !== null">rec/s</small></span></div>
       <div class="sc-metric"><span class="sc-label">{{ tr('drawer.lag') }}</span><span class="sc-metric__value">{{ formatCount(group.flow?.lag[sub.id]) }}</span></div>
       <div class="sc-metric"><span class="sc-label">{{ tr('drawer.tasks') }}</span><span class="sc-metric__value">{{ sub.partitions }}</span></div>
     </div>

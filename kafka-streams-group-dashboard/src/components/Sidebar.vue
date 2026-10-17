@@ -3,11 +3,14 @@ import type { GroupView } from '../../shared/types'
 import { isBehind, maxLag } from '../console'
 import { formatCount, formatRate } from '../format'
 import { LANGS, useI18n } from '../i18n'
+import { THEMES, useTheme } from '../theme'
 import type { Route } from '../route'
 
 defineProps<{ groups: GroupView[]; route: Route; mode: 'sim' | 'real' | undefined }>()
 const emit = defineEmits<{ navigate: [route: Route] }>()
 const { lang, setLang, tr } = useI18n()
+const { theme, setTheme } = useTheme()
+const themeKey = { system: 'theme.system', light: 'theme.light', dark: 'theme.dark' } as const
 
 const dot = (g: GroupView) =>
   g.members.some((m) => m.status === 'crashed')
@@ -55,6 +58,17 @@ const langLabel = { en: 'EN', 'zh-Hant': '繁中' }
           @click="setLang(l)"
         >
           {{ langLabel[l] }}
+        </button>
+      </div>
+      <div class="sc-lang" role="group" :aria-label="tr('theme.label')">
+        <button
+          v-for="x in THEMES"
+          :key="x"
+          :aria-pressed="theme === x"
+          :data-testid="`theme-${x}`"
+          @click="setTheme(x)"
+        >
+          {{ tr(themeKey[x]) }}
         </button>
       </div>
       <span class="sc-label" data-testid="mode">{{ mode === 'real' ? tr('app.live') : tr('app.sim') }}</span>

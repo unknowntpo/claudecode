@@ -1,7 +1,7 @@
 // Spec 003 (docs/specs/003-console-v2/spec.md): CV1–CV10 as pure functions over GroupView.
 import { describe, expect, test } from 'bun:test'
 import type { GroupState, GroupView, MemberView } from '../shared/types'
-import { drawerSubtopology, isBehind, processCards, sortGroups, taskRows } from './console'
+import { drawerSubtopology, isBehind, maxLag, processCards, sortGroups, taskRows } from './console'
 import { testPlanRows as consoleRows } from './console.cases'
 import { testPlanRows as detailRows } from './detail.cases'
 import { DICTIONARIES, detectLang, PROTECTED_TERMS, t } from './i18n'
@@ -108,6 +108,15 @@ describe('i18n', () => {
     expect(t('zh-Hant', 'metric.processCount', { n: 3 })).toBe('3 個 process')
   })
 
+  test('CV5: a placeholder without a value stays visible as {name}', () => {
+    expect(t('en', 'metric.crashed', {})).toBe('{n} crashed')
+  })
+
+  test('CV2: largest lag is null while every lag is unknown, not 0', () => {
+    expect(maxLag(view({ flow: { topics: [], lag: { '0': null, '1': null }, inputRate: 5 } }))).toBeNull()
+    expect(maxLag(view({ flow: { topics: [], lag: { '0': null, '1': 7 }, inputRate: 5 } }))).toBe(7)
+  })
+
   test('CV7: a missing zh-Hant key falls back to English, never the key', () => {
     const en = { 'only.en': 'Only English' }
     expect(t('zh-Hant', 'only.en', {}, { en, 'zh-Hant': {} })).toBe('Only English')
@@ -143,6 +152,9 @@ describe('routes and drawer', () => {
     const sub = { id: '1', name: 'count', sourceTopics: [], repartitionSourceTopics: [], repartitionSinkTopics: [], stateChangelogTopics: [], sinkTopics: [], stores: [], partitions: 4 }
     const g = view({ topology: { epoch: 0, subtopologies: [sub] } })
     expect(drawerSubtopology(g, '1')?.id).toBe('1') // positive control
+    const two = view({ topology: { epoch: 0, subtopologies: [{ ...sub, id: '0', name: 'split' }, sub] } })
+    expect(drawerSubtopology(two, '1')?.name).toBe('count')
+    expect(drawerSubtopology(two, '0')?.name).toBe('split')
     expect(drawerSubtopology(view(), '1')).toBeNull()
     expect(drawerSubtopology(g, null)).toBeNull()
   })

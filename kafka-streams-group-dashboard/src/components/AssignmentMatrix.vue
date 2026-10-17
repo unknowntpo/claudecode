@@ -30,8 +30,10 @@ function cell(m: MemberView, t: TaskId): Cell {
   return null
 }
 
+/** No live member processes it: a crashed owner does not count (same rule as the drawer, Spec 003 CV3). */
 const unowned = (t: TaskId) =>
-  members.value.some((m) => m.status !== 'joining') && !props.group.members.some((m) => m.assignment.active.includes(t))
+  members.value.some((m) => m.status !== 'joining') &&
+  !props.group.members.some((m) => m.status !== 'crashed' && m.assignment.active.includes(t))
 const subtopologyOf = (t: TaskId) => t.split('_')[0]
 /** Placeholders of starting processes share a memberId, so key by process too. */
 const key = (m: MemberView) => `${m.processId}/${m.memberId}`

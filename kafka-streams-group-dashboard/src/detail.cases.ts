@@ -28,6 +28,7 @@ export const testPlanRows: DetailCase[] = [
   cards('starting before crashed', 'A/m1 crashed a=0_0 | C/(starting) joining', 'C joining [(starting): ] | A crashed [m1: 0_0A]'),
   cards('a process with one starting thread is alive', 'A/m1 alive a=0_0 | A/(starting) joining', 'A alive [m1: 0_0A] [(starting): ]'),
   cards('tasks sort by subtopology, then partition', 'A/m1 alive a=1_0,0_1', 'A alive [m1: 0_1A 1_0A]'),
+  cards('alive processes sort by label', 'B/m2 alive a=0_1 | A/m1 alive a=0_0', 'A alive [m1: 0_0A] | B alive [m2: 0_1A]'),
   cards('two threads in one process', 'A/m1 alive a=0_0 | A/m3 alive a=0_1', 'A alive [m1: 0_0A] [m3: 0_1A]'),
   { ...cards('crashed without a known kill time has no duration', 'B/m2 crashed a=0_0', 'B crashed [m2: 0_0A]'), id: 'CV10' },
   cards('an alive process with a recent heartbeat shows no duration', 'A/m1 alive a=0_0 ms=1500', 'A alive [m1: 0_0A]'),

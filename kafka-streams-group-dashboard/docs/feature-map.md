@@ -54,6 +54,7 @@ that alters behavior.
 | Route | URL hash `#/`, `#/group/<id>` | `parseRoute` | CV6 |
 | Sidebar group item | `[data-testid=nav-<id>]` (`aria-current="page"`) | `sortGroups`, `isBehind` | CV1, CV2 |
 | Language toggle | `[data-testid=lang-en]`, `[data-testid=lang-zh-Hant]` (`aria-pressed`) | `useI18n`, `detectLang` | CV5, CV7, CV8 |
+| Theme toggle | `[data-testid=theme-system|theme-light|theme-dark]` (`aria-pressed`), sets `<html data-theme>` | `useTheme`, `detectTheme` | CV15, CV16 |
 | Overview row | `[data-testid=row-<id>]` | `sortGroups`, `maxLag` | CV1, CV11 |
 | Crash alert | `[data-testid=crash-alert]` | `processCards` | CV4, CV10 |
 | Total input rate | `[data-testid=total-rate]` | sum of `flow.inputRate` | CV14 |
