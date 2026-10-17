@@ -12,3 +12,8 @@ RB7: CAUGHT (streams-app/src/main/java/ksgd/Inspector.java)
 RB8: CAUGHT (streams-app/src/main/java/ksgd/StreamsRunner.java)
 RB9: CAUGHT (server/real/backend.ts)
 RB13 measured: STABLE 9874 ms after starting the second process
+
+2026-10-17, after RB13 budget 20 s -> 8 s:
+RB13 (heartbeat 9000): CAUGHT
+RB13 (heartbeat 5000, broker default): SURVIVED, measured 5684 ms (< 8 s). Accepted: a 2x slowdown is inside the budget; catching it needs ~5 s, too close to the 2.9 s normal value.
+RB13 unmutated: measured 2862 ms

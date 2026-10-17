@@ -13,7 +13,8 @@ const DIST = `${import.meta.dir}/../dist`
 const backend: Backend = process.env.MODE === 'sim' ? new SimBackend() : new RealBackend()
 
 const server = Bun.serve({
-  port: Number(process.env.PORT ?? 3000),
+  // SERVER_PORT, not PORT: preview tools set PORT for the Vite dev server, which proxies /ws to 3000
+  port: Number(process.env.SERVER_PORT ?? 3000),
   async fetch(req, server) {
     const { pathname } = new URL(req.url)
     if (pathname === '/ws') {

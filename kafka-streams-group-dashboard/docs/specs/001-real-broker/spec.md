@@ -179,7 +179,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 - RB17: word-count has no members → broker restarts → `GET /groups?ids=word-count,order-enrichment` → 200; word-count is `EMPTY` (the broker answers without topology and `Admin` throws `Topology information is missing`), the other group is still described.
 
 ### Budget
-- RB13: one process STABLE → start a second process → group is STABLE with the new member owning tasks within 20 s (measured value printed by the test).
+- RB13: one process STABLE → start a second process → group is STABLE with the new member owning tasks within 8 s (measured 2.9 s on 2026-10-15; a 9 s heartbeat interval took 9.9 s and must fail this; human decision 2026-10-17).
 
 ### Observability
 - RB14: [deploy] snapshot `error` is shown as a banner in the dashboard (checked in the running local app by the verifier).

@@ -88,10 +88,10 @@ describe.skipIf(!process.env.E2E)('real broker', () => {
       expect(live(g).filter((m) => m.processId === label).flatMap((m) => m.assignment.active).length).toBeGreaterThan(0)
   }, TIMEOUT)
 
-  test('RB13: a second process owns tasks and the group is STABLE within 20 s', async () => {
+  test('RB13: a second process owns tasks and the group is STABLE within 8 s', async () => {
     await startProcesses(1)
     await backend.handle({ type: 'addMember', groupId: GROUP })
-    const ms = await waitFor('2 processes STABLE', (g) => stable(2)(g) && partitioned(g), 20_000)
+    const ms = await waitFor('2 processes STABLE', (g) => stable(2)(g) && partitioned(g), 8_000)
     console.log(`RB13 measured: STABLE ${ms} ms after starting the second process`)
     expect(live(view()).every((m) => m.assignment.active.length > 0)).toBe(true)
   }, TIMEOUT)
