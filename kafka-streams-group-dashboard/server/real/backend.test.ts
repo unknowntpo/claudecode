@@ -1,5 +1,8 @@
 // Spec 001: RB10 / RB11, the real backend's failure reporting (no broker needed).
 import { afterEach, describe, expect, test } from 'bun:test'
+import { chmodSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { RealBackend } from './backend'
 import type { InspectorGroup } from './mapping'
 
@@ -77,8 +80,11 @@ describe('RealBackend failures', () => {
       assignment: { active: ['0_0'], standby: [], warmup: [] }, targetAssignment: { active: ['0_0'], standby: [], warmup: [] },
     }
     const inspector = Bun.serve({ port: 0, fetch: () => Response.json({ groups: [{ ...group, members: [member] }] }) })
-    // /bin/cat waits on stdin like a real streams-app run, so the process stays alive until killed
-    backend = new RealBackend({ bin: '/bin/cat', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    // a fake streams-app that stays alive until killed, whatever its arguments
+    const bin = join(tmpdir(), `fake-streams-app-${process.pid}`)
+    await Bun.write(bin, '#!/bin/sh\nexec sleep 30\n')
+    chmodSync(bin, 0o755)
+    backend = new RealBackend({ bin, inspectorUrl: `http://127.0.0.1:${inspector.port}` })
     await backend.handle({ type: 'addMember', groupId: 'word-count' })
     await backend.tick({ force: true })
     const silent = () => backend!.snapshot().groups.find((g) => g.groupId === 'word-count')!.members[0]

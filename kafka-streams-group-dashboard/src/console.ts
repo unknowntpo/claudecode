@@ -28,8 +28,8 @@ export interface TaskRow {
   task: TaskId
   /** Members owning the task as active, with whether their process crashed. */
   active: { processId: string; crashed: boolean }[]
-  /** Processes holding a standby. */
-  standby: string[]
+  /** Processes holding a standby, with whether they crashed. */
+  standby: { processId: string; crashed: boolean }[]
   /** "A→B" while the owner revokes and another member waits for it. */
   move: string | null
   /** No live member is processing it. */
@@ -47,7 +47,9 @@ export function taskRows(g: GroupView, subtopologyId: string): TaskRow[] {
       return {
         task,
         active: owners.map((m) => ({ processId: m.processId, crashed: m.status === 'crashed' })),
-        standby: g.members.filter((m) => m.assignment.standby.includes(task)).map((m) => m.processId),
+        standby: g.members
+          .filter((m) => m.assignment.standby.includes(task))
+          .map((m) => ({ processId: m.processId, crashed: m.status === 'crashed' })),
         move: revoking && waiting ? `${revoking.processId}→${waiting.processId}` : null,
         unowned: !owners.some((m) => m.status !== 'crashed'),
       }

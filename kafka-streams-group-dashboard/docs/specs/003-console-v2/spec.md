@@ -29,7 +29,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | Screen | Expected |
 | --- | --- |
 | Overview | `page-view-sessions` listed first with `RECONCILING` (or `STABLE` until the broker notices), members "2 · 1 crashed", growing lag; alert "process-B stopped heart-beating N s ago" |
-| Sidebar | red dot on `page-view-sessions` with `lag 66`; the others show their input rate (`4.9/s`) |
+| Sidebar | red dot on `page-view-sessions`; `lag N` once it is behind (with standbys the survivor takes over right after fencing, so the lag may never get there), else its input rate (`4.9/s`) |
 | Drawer, subtopology 0 | rows `0_3`–`0_5`: active owner process-B shown crashed, standby process-A, `!` for no working owner |
 | Processes | process-B card red, "stopped heart-beating N s ago; fenced at the 10 s session timeout" |
 | 繁中 | 總覽, 群組, 成員, 輸入速率, 啟動新 process; `RECONCILING`, `0_3`, `page-views` unchanged |
@@ -49,9 +49,12 @@ The canvas's four artboards are the example, with this live scenario (values fro
    Escape, selecting the node again, or when that subtopology no longer exists. The pipeline stays visible.
 5. **Processes tab**: one `ProcessCard` per process, alive first then crashed, each by label; threads with
    member id, epoch and task chips (active then standby, in task order); actions on live processes only; a
-   crashed card says how long ago it stopped heart-beating (known only for processes the console killed).
+   crashed card says how long ago it stopped heart-beating (known for processes the console killed and JVMs that
+   exited on their own; unknown for anything else).
 6. **Behind**: a group is behind when its largest subtopology lag exceeds 5 seconds of its input rate
-   (lag > 5 × input rate), or the input rate is unknown and lag > 0.
+   (lag > 5 × input rate), or the input rate is unknown and lag > 0. This includes an EMPTY group whose input
+   keeps arriving: nothing processes it, so the app may be down (human decision, 2026-10-17, after the verifier
+   asked whether idle groups should be loud).
 7. **Languages**: `en` and `zh-Hant` dictionaries with the same keys; a missing key falls back to English;
    protocol states, ids, topic/group/store/config names and units are never translated. The choice is
    remembered per viewer (`localStorage`, best effort) and defaults to `zh-Hant` when the browser prefers
@@ -83,8 +86,8 @@ The canvas's four artboards are the example, with this live scenario (values fro
 ### Failure and retry
 - CV7: a missing `zh-Hant` key falls back to the English text, never the key.
 - CV8: a stored language that is not `en` / `zh-Hant`, or storage that throws → the browser default.
-- CV9: the selected subtopology disappears (group emptied, topology changed) → the drawer closes.
-- CV10: a crashed process the console did not kill (no kill time) → its card has no "N s ago" text.
+- CV9: the selected subtopology disappears (topology changed to one without it; an emptied group keeps its topology on a real broker) → the drawer closes.
+- CV10: a crashed process without a known stop time (the console neither killed it nor saw its JVM exit) → its card has no "N s ago" text.
 - CV11: [deploy] no groups or no members → overview and processes show their empty states, not a blank panel.
 - CV12: the killed-at time survives polls: `msSinceHeartbeat` grows between two snapshots of a killed process.
 
@@ -105,6 +108,8 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | CV1 | EMPTY ranks with STABLE | b:EMPTY a:STABLE |  |  | a b |
 | CV1 | no groups |  |  |  |  |
 | CV2 | lag above 5 s of input |  | 30 | 5 | behind |
+| CV2 | the largest of several subtopology lags counts |  | 2,30 | 5 | behind |
+| CV2 | an EMPTY group whose input keeps arriving is behind (human, 2026-10-17) |  | 3013 | 9.9 | behind |
 | CV2 | lag exactly 5 s of input is not behind |  | 25 | 5 | ok |
 | CV2 | lag below 5 s of input |  | 4 | 5 | ok |
 | CV2 | unknown rate and some lag |  | 3 | - | behind |
@@ -120,9 +125,17 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | CV3 | stable owner and standby on another process | A/m1 alive a=0_0 \| B/m2 alive s=0_0 | 0 | 0_0 A:A S:B |
 | CV3 | crashed owner: no working owner, standby elsewhere | A/m1 alive s=0_3 \| B/m2 crashed a=0_3 | 0 | 0_3 A:B× S:A ! |
 | CV3 | owner revoking, new owner waiting: a move | A/m1 alive a=0_2 r=0_2 \| B/m2 alive t=0_2 | 0 | 0_2 A:A→B |
+| CV3 | owner revoking with nobody waiting is no move | A/m1 alive a=0_2 r=0_2 | 0 | 0_2 A:A |
+| CV3 | standby comes from the owned assignment, not the target | A/m1 alive a=0_1 \| B/m2 alive ts=0_1 | 0 | 0_1 A:A |
+| CV3 | a crashed standby holder is marked | A/m1 alive a=0_0 \| B/m2 crashed s=0_0 | 0 | 0_0 A:A S:B× |
+| CV3 | subtopology 1 does not include subtopology 10 | A/m1 alive a=1_0,10_0 | 1 | 1_0 A:A |
 | CV3 | nobody owns it | A/m1 alive a=1_0 | 0 | 0_0 A:— ! |
 | CV3 | other subtopologies are left out | A/m1 alive a=0_0,1_0 | 0 | 0_0 A:A |
 | CV4 | alive before crashed, threads with tasks in task order, active then standby | B/m2 crashed a=0_3 ms=6000 \| A/m1 alive a=0_1,0_0 s=0_3 |  | A alive [m1: 0_0A 0_1A 0_3S] \| B crashed 6s [m2: 0_3A] |
+| CV4 | alive first even when the crashed process sorts first by name | A/m1 crashed a=0_0 \| B/m2 alive a=0_1 |  | B alive [m2: 0_1A] \| A crashed [m1: 0_0A] |
+| CV4 | starting before crashed | A/m1 crashed a=0_0 \| C/(starting) joining |  | C joining [(starting): ] \| A crashed [m1: 0_0A] |
+| CV4 | a process with one starting thread is alive | A/m1 alive a=0_0 \| A/(starting) joining |  | A alive [m1: 0_0A] [(starting): ] |
+| CV4 | tasks sort by subtopology, then partition | A/m1 alive a=1_0,0_1 |  | A alive [m1: 0_1A 1_0A] |
 | CV4 | two threads in one process | A/m1 alive a=0_0 \| A/m3 alive a=0_1 |  | A alive [m1: 0_0A] [m3: 0_1A] |
 | CV10 | crashed without a known kill time has no duration | B/m2 crashed a=0_0 |  | B crashed [m2: 0_0A] |
 | CV4 | an alive process with a recent heartbeat shows no duration | A/m1 alive a=0_0 ms=1500 |  | A alive [m1: 0_0A] |

@@ -22,6 +22,8 @@ export const testPlanRows: ConsoleCase[] = [
   order('EMPTY ranks with STABLE', 'b:EMPTY a:STABLE', 'a b'),
   order('no groups', '', ''),
   behind('lag above 5 s of input', '30', '5', 'behind'),
+  behind('the largest of several subtopology lags counts', '2,30', '5', 'behind'),
+  behind('an EMPTY group whose input keeps arriving is behind (human, 2026-10-17)', '3013', '9.9', 'behind'),
   behind('lag exactly 5 s of input is not behind', '25', '5', 'ok'),
   behind('lag below 5 s of input', '4', '5', 'ok'),
   behind('unknown rate and some lag', '3', '-', 'behind'),

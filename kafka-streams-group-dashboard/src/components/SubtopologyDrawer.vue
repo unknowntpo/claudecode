@@ -64,7 +64,12 @@ const inputRate = computed(() => {
               <template v-else>—</template>
             </td>
             <td>
-              <template v-if="r.standby.length"><span class="sc-chip sc-chip--standby">S</span> {{ r.standby.join(', ') }}</template>
+              <template v-if="r.standby.length">
+                <span v-for="s in r.standby" :key="s.processId" class="owner">
+                  <span class="sc-chip sc-chip--standby">S</span>
+                  <span :class="{ fenced: s.crashed }">{{ s.processId }}<template v-if="s.crashed"> ×</template></span>
+                </span>
+              </template>
               <template v-else>—</template>
             </td>
           </tr>
@@ -78,5 +83,6 @@ const inputRate = computed(() => {
 .drawer { width: auto; flex: 1 1 360px; max-width: 420px; border-radius: 0; align-self: stretch; }
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .owner { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
+.fenced { color: var(--state-fenced); }
 @media (max-width: 900px) { .drawer { max-width: none; flex-basis: 100%; border-left: 0; border-top: 1px solid var(--line); } }
 </style>

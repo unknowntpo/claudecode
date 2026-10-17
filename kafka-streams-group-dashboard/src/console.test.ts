@@ -5,7 +5,7 @@ import { drawerSubtopology, isBehind, processCards, sortGroups, taskRows } from 
 import { testPlanRows as consoleRows } from './console.cases'
 import { testPlanRows as detailRows } from './detail.cases'
 import { DICTIONARIES, detectLang, PROTECTED_TERMS, t } from './i18n'
-import { parseRoute } from './route'
+import { parseRoute, routeHash } from './route'
 
 /** "A/m1 alive a=0_0,0_1 s=0_3 t=0_2 r=0_2 ms=6000" → MemberView */
 function member(spec: string): MemberView {
@@ -22,7 +22,7 @@ function member(spec: string): MemberView {
     status: status as MemberView['status'],
     assignment: { active: list('a'), standby: list('s') },
     pendingRevocation: { active: list('r'), standby: [] },
-    target: { active: [...list('a').filter((x: string) => !list('r').includes(x)), ...list('t')], standby: list('s') },
+    target: { active: [...list('a').filter((x: string) => !list('r').includes(x)), ...list('t')], standby: kv.ts ? list('ts') : list('s') },
     msSinceHeartbeat: kv.ms ? Number(kv.ms) : 0,
   }
 }
@@ -37,7 +37,7 @@ function view(over: Partial<GroupView> = {}): GroupView {
     targetAssignmentEpoch: 1,
     numStandbyReplicas: 0,
     topology: { epoch: 0, subtopologies: [] },
-    tasks: ['0_0', '0_1', '0_2', '0_3', '1_0'],
+    tasks: ['0_0', '0_1', '0_2', '0_3', '1_0', '10_0'],
     members: [],
     events: [],
     flow: null,
@@ -60,10 +60,8 @@ describe('order and behind', () => {
       expect(sortGroups(groups).map((g) => g.groupId).join(' ')).toBe(row.expected)
     } else {
       const num = (v: string) => (v === '-' ? null : Number(v))
-      const g = view({
-        topology: { epoch: 0, subtopologies: [] },
-        flow: { topics: [], lag: { '0': num(row.lag) }, inputRate: num(row.rate) },
-      })
+      const lags = Object.fromEntries(row.lag.split(',').map((l, i) => [String(i), num(l)]))
+      const g = view({ topology: { epoch: 0, subtopologies: [] }, flow: { topics: [], lag: lags, inputRate: num(row.rate) } })
       expect(isBehind(g) ? 'behind' : 'ok').toBe(row.expected)
     }
   })
@@ -73,7 +71,7 @@ const fmtRow = (r: ReturnType<typeof taskRows>[number]) =>
   [
     r.task,
     `A:${r.move ?? (r.active.length ? r.active.map((a) => a.processId + (a.crashed ? '×' : '')).join(',') : '—')}`,
-    ...(r.standby.length ? [`S:${r.standby.join(',')}`] : []),
+    ...(r.standby.length ? [`S:${r.standby.map((s) => s.processId + (s.crashed ? '×' : '')).join(',')}`] : []),
     ...(r.unowned ? ['!'] : []),
   ].join(' ')
 
@@ -105,6 +103,11 @@ describe('i18n', () => {
     expect(t('zh-Hant', 'nav.overview')).toBe('總覽') // positive control: zh is really used
   })
 
+  test('CV5: placeholders are filled in both languages', () => {
+    expect(t('en', 'metric.crashed', { n: 2 })).toBe('2 crashed')
+    expect(t('zh-Hant', 'metric.processCount', { n: 3 })).toBe('3 個 process')
+  })
+
   test('CV7: a missing zh-Hant key falls back to English, never the key', () => {
     const en = { 'only.en': 'Only English' }
     expect(t('zh-Hant', 'only.en', {}, { en, 'zh-Hant': {} })).toBe('Only English')
@@ -127,6 +130,13 @@ describe('routes and drawer', () => {
     expect(parseRoute('#/group/nope', ids)).toEqual({ page: 'overview' })
     expect(parseRoute('#garbage', ids)).toEqual({ page: 'overview' })
     expect(parseRoute('', ids)).toEqual({ page: 'overview' })
+  })
+
+  test('CV6: routeHash and parseRoute round-trip, ids are encoded', () => {
+    const ids = ['word-count', 'a b/c']
+    for (const groupId of ids) expect(parseRoute(routeHash({ page: 'group', groupId }), ids)).toEqual({ page: 'group', groupId })
+    expect(routeHash({ page: 'group', groupId: 'a b/c' })).toBe('#/group/a%20b%2Fc')
+    expect(routeHash({ page: 'overview' })).toBe('#/')
   })
 
   test('CV9: the drawer closes when its subtopology disappears', () => {

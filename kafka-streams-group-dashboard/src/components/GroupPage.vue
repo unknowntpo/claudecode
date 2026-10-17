@@ -31,6 +31,7 @@ const tabs: { id: Tab; label: Key }[] = [
 
 const live = computed(() => props.group.members.filter((m) => m.status !== 'joining'))
 const processCount = computed(() => new Set(live.value.map((m) => m.processId)).size)
+const crashedCount = computed(() => new Set(props.group.members.filter((m) => m.status === 'crashed').map((m) => m.processId)).size)
 
 const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') selected.value = null }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -66,7 +67,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <div class="sc-metric"><span class="sc-label">{{ tr('metric.targetEpoch') }}</span><span class="sc-metric__value">{{ group.targetAssignmentEpoch }}</span></div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.members') }}</span><span class="sc-metric__value">{{ live.length }}</span>
-          <span class="sc-metric__note">{{ tr('metric.processCount', { n: processCount }) }}</span>
+          <span v-if="crashedCount" class="sc-metric__note bad" data-testid="crashed-note">× {{ tr('metric.crashed', { n: crashedCount }) }}</span>
+          <span v-else class="sc-metric__note">{{ tr('metric.processCount', { n: processCount }) }}</span>
         </div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.tasks') }}</span><span class="sc-metric__value">{{ group.tasks.length }}</span>
@@ -117,6 +119,7 @@ select {
 }
 .description { margin: 0; max-width: 72ch; color: var(--ink-muted); }
 .note { margin: 0; color: var(--ink-muted); font-size: 13px; }
+.bad { color: var(--state-fenced); }
 .inspector { display: grid; gap: var(--space-4); min-width: 0; }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5, 20px); border-bottom: 1px solid var(--line); }
 .tab {

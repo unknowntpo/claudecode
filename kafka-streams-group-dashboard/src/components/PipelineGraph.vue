@@ -19,7 +19,8 @@ const edgeRate = (topics: string[]) => {
   return rates.length && rates.every((r) => r !== null) ? rates.reduce((a, b) => a! + b!, 0) : null
 }
 const isRepartition = (topics: string[]) => topics.length > 0 && topics.every((t) => !sinks.value.includes(t))
-const owned = computed(() => new Set(props.group.members.flatMap((m) => m.assignment.active)))
+/** Tasks a live member is processing; a crashed owner does not count (Spec 003 CV3). */
+const owned = computed(() => new Set(props.group.members.filter((m) => m.status !== 'crashed').flatMap((m) => m.assignment.active)))
 const toggle = (id: string) => emit('select', props.selected === id ? null : id)
 </script>
 
