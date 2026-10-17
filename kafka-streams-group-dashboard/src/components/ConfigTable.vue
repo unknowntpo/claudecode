@@ -1,30 +1,30 @@
 <script setup lang="ts">
 import type { ConfigEntry } from '../../shared/types'
+import { useI18n } from '../i18n'
 
 defineProps<{ configs: ConfigEntry[]; mode: 'sim' | 'real' }>()
+const { tr } = useI18n()
 </script>
 
 <template>
   <div>
-    <p v-if="mode === 'sim'" class="note">The simulator has no broker configuration.</p>
-    <p v-else-if="configs.length === 0" class="note">No configuration reported yet.</p>
+    <p v-if="mode === 'sim'" class="note">{{ tr('config.sim') }}</p>
+    <p v-else-if="configs.length === 0" class="note">{{ tr('config.none') }}</p>
     <table v-else class="sc-config">
       <thead>
-        <tr><th>Key</th><th>Value</th><th>Scope</th></tr>
+        <tr><th>{{ tr('config.key') }}</th><th>{{ tr('config.value') }}</th><th>{{ tr('config.scope') }}</th></tr>
       </thead>
       <tbody>
         <tr v-for="c in configs" :key="c.key">
           <td>{{ c.key }}</td>
           <td>{{ c.value ?? '—' }}</td>
           <td>
-            <span class="sc-scope" :class="{ 'sc-scope--override': c.source === 'group' }">{{ c.source === 'group' ? 'group' : 'broker default' }}</span>
+            <span class="sc-scope" :class="{ 'sc-scope--override': c.source === 'group' }">{{ c.source === 'group' ? tr('config.group') : tr('config.default') }}</span>
           </td>
         </tr>
       </tbody>
     </table>
-    <p v-if="mode === 'real'" class="note">
-      A change to <code>streams.num.standby.replicas</code> applies at the next rebalance; only stateful tasks get standbys.
-    </p>
+    <p v-if="mode === 'real'" class="note">{{ tr('group.standbyNote') }}</p>
   </div>
 </template>
 

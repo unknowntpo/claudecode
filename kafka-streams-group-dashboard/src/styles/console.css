@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Schibsted+Grotesk:wght@400;600;700&display=swap');
 
 /* Streams Console components. Every value comes from tokens.css; class names are prefixed sc-. */
 
@@ -17,6 +17,8 @@
   font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--ink-muted);
 }
+:lang(zh-Hant) .sc-label, .sc-label:lang(zh-Hant) { text-transform: none; letter-spacing: 0; }
+:lang(zh-Hant) .sc-body, .sc-root:lang(zh-Hant) { line-height: 22px; }
 .sc-panel {
   background: var(--surface-raised);
   border: 1px solid var(--line);
@@ -179,3 +181,88 @@
 .sc-button--danger { color: var(--state-fenced); }
 .sc-button--small { font-size: 12px; line-height: 16px; padding: 2px var(--space-2); }
 .sc-button:disabled { color: var(--state-idle); background: var(--surface-sunken); cursor: not-allowed; }
+
+/* Sidebar: every group with a state dot; the app shell */
+.sc-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100%; }
+.sc-sidebar {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  background: var(--surface-raised); border-right: 1px solid var(--line);
+  padding: var(--space-4) var(--space-3);
+}
+.sc-sidebar__brand { font-weight: 700; font-size: 15px; padding: 0 var(--space-2) var(--space-3); }
+.sc-sidebar__section { margin: var(--space-3) var(--space-2) var(--space-1); }
+.sc-nav-item {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2);
+  padding: 6px var(--space-2); border-radius: var(--radius-panel);
+  color: var(--ink); text-decoration: none; cursor: pointer; border: 1px solid transparent;
+  font: inherit; background: none; text-align: left; width: 100%;
+}
+.sc-nav-item:hover { border-color: var(--line-strong); }
+.sc-nav-item[aria-current="page"] { background: var(--surface-sunken); border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.sc-nav-item__name { font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-nav-item__meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); }
+.sc-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.sc-dot--active { color: var(--state-active); }
+.sc-dot--revoking { color: var(--state-revoking); }
+.sc-dot--fenced { color: var(--state-fenced); }
+.sc-dot--idle { color: var(--state-idle); background: transparent; border: 1.5px solid currentColor; box-sizing: border-box; }
+@media (max-width: 900px) { .sc-shell { grid-template-columns: 1fr; } .sc-sidebar { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+/* GroupTable: overview, one row per group */
+.sc-groups { width: 100%; border-collapse: collapse; }
+.sc-groups th, .sc-groups td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.sc-groups thead th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); background: var(--surface-sunken); }
+:lang(zh-Hant) .sc-groups thead th { text-transform: none; letter-spacing: 0; }
+.sc-groups td.sc-num { font-family: var(--font-mono); text-align: right; }
+.sc-groups th.sc-num { text-align: right; }
+.sc-groups tbody tr { cursor: pointer; }
+.sc-groups tbody tr:hover { background: var(--surface-sunken); }
+.sc-groups .sc-group-name { font-family: var(--font-mono); font-weight: 500; }
+.sc-groups .sc-warn { color: var(--state-revoking); }
+.sc-groups .sc-bad { color: var(--state-fenced); }
+
+/* Drawer: subtopology detail beside the pipeline */
+.sc-drawer {
+  display: grid; align-content: start; gap: var(--space-4);
+  width: 380px; max-width: 100%;
+  background: var(--surface-raised); border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-popover);
+  padding: var(--space-4);
+}
+.sc-drawer__head { display: flex; align-items: start; justify-content: space-between; gap: var(--space-2); }
+.sc-drawer__title { font-size: 16px; line-height: 22px; font-weight: 600; margin: 0; }
+.sc-drawer__section { display: grid; gap: var(--space-2); }
+.sc-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3); font-size: 13px; }
+.sc-kv dt { color: var(--ink-muted); }
+.sc-kv dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.sc-tasklist { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sc-tasklist th, .sc-tasklist td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); text-align: left; }
+.sc-tasklist th { font-weight: 600; color: var(--ink-muted); font-size: 12px; }
+.sc-tasklist td:first-child, .sc-tasklist td.sc-num { font-family: var(--font-mono); }
+.sc-tasklist td.sc-num { text-align: right; }
+@media (prefers-reduced-motion: no-preference) { .sc-drawer { animation: sc-slide 200ms ease-out; } }
+@keyframes sc-slide { from { transform: translateX(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+/* ProcessCard: one KafkaStreams instance and its threads */
+.sc-processes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+.sc-process {
+  display: grid; gap: var(--space-3);
+  background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-panel);
+  padding: var(--space-3);
+}
+.sc-process--crashed { border-color: var(--state-fenced); }
+.sc-process__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.sc-process__name { font-family: var(--font-mono); font-weight: 500; }
+.sc-thread { display: grid; gap: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--line); }
+.sc-thread__head { display: flex; justify-content: space-between; gap: var(--space-2); font-size: 12px; color: var(--ink-muted); }
+.sc-thread__tasks { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.sc-process__actions { display: flex; gap: var(--space-1); }
+
+/* LanguageToggle: EN / 繁中 segmented control */
+.sc-lang { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius-panel); overflow: hidden; }
+.sc-lang button {
+  font: 600 12px/16px var(--font-sans); padding: 4px 10px; border: 0; cursor: pointer;
+  background: var(--surface-raised); color: var(--ink-muted);
+}
+.sc-lang button + button { border-left: 1px solid var(--line-strong); }
+.sc-lang button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }

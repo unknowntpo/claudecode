@@ -3,8 +3,10 @@ import { computed } from 'vue'
 import { tasksOf } from '../../shared/pipeline'
 import type { ClientMessage, GroupView, MemberView, TaskId } from '../../shared/types'
 import { badgeClass } from '../format'
+import { useI18n } from '../i18n'
 
 const props = defineProps<{ group: GroupView; selected: string | null; send: (msg: ClientMessage) => void }>()
+const { tr } = useI18n()
 
 /** Members grouped by process (one KafkaStreams instance = one process, one member per StreamThread). */
 const processes = computed(() => {
@@ -40,7 +42,7 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
 
 <template>
   <div class="sc-matrix">
-    <p v-if="members.length === 0" class="empty">No members. Start a process to join the group.</p>
+    <p v-if="members.length === 0" class="empty">{{ tr('tasks.empty') }}</p>
     <table v-else>
       <thead>
         <tr>
@@ -48,9 +50,9 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
           <th v-for="p in processes" :key="p.processId" :colspan="p.members.length">
             {{ p.processId }}
             <div v-if="alive(p.processId)" class="actions">
-              <button class="sc-button sc-button--small" title="Start one more StreamThread in this process" @click="send({ type: 'addMember', groupId: group.groupId, processId: p.processId })">+ thread</button>
-              <button class="sc-button sc-button--small" title="Graceful shutdown: members leave the group" @click="send({ type: 'stopProcess', groupId: group.groupId, processId: p.processId })">stop</button>
-              <button class="sc-button sc-button--small sc-button--danger" title="kill -9: fenced after the session timeout" @click="send({ type: 'killProcess', groupId: group.groupId, processId: p.processId })">kill</button>
+              <button class="sc-button sc-button--small" :title="tr('action.threadTitle')" @click="send({ type: 'addMember', groupId: group.groupId, processId: p.processId })">{{ tr('action.thread') }}</button>
+              <button class="sc-button sc-button--small" :title="tr('action.stopTitle')" @click="send({ type: 'stopProcess', groupId: group.groupId, processId: p.processId })">{{ tr('action.stop') }}</button>
+              <button class="sc-button sc-button--small sc-button--danger" :title="tr('action.killTitle')" @click="send({ type: 'killProcess', groupId: group.groupId, processId: p.processId })">{{ tr('action.kill') }}</button>
             </div>
           </th>
         </tr>
@@ -59,13 +61,13 @@ const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.statu
           <th v-for="m in members" :key="key(m)" class="sc-member">
             <div class="sc-member__id" :title="m.memberId">{{ shortId(m.memberId) }}</div>
             <div class="sc-member__epoch">epoch {{ m.memberEpoch }}</div>
-            <span :class="badgeClass(memberBadge(m))">{{ memberBadge(m) }}</span>
+            <span :class="badgeClass(memberBadge(m))">{{ m.status === 'alive' ? m.state : tr(m.status === 'crashed' ? 'status.crashed' : 'status.joining') }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="(t, i) in tasks" :key="t" :class="{ 'sc-split': i > 0 && subtopologyOf(t) !== subtopologyOf(tasks[i - 1]) }">
-          <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" title="no member owns this task right now">!</span></th>
+          <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" :title="tr('tasks.unowned')">!</span></th>
           <td v-for="m in members" :key="key(m)">
             <span v-if="cell(m, t)" :class="cell(m, t)!.cls" :title="cell(m, t)!.title">{{ cell(m, t)!.label }}</span>
           </td>

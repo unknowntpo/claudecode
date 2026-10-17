@@ -3,9 +3,11 @@ import { computed } from 'vue'
 import { pipelineLayout, tasksOf } from '../../shared/pipeline'
 import type { GroupView } from '../../shared/types'
 import { formatCount, formatRate } from '../format'
+import { useI18n } from '../i18n'
 
 const props = defineProps<{ group: GroupView; selected: string | null }>()
 const emit = defineEmits<{ select: [id: string | null] }>()
+const { tr } = useI18n()
 
 const subs = computed(() => props.group.topology.subtopologies)
 const sinks = computed(() => props.group.flow?.topics.filter((t) => t.kind === 'sink').map((t) => t.name) ?? [])
@@ -22,9 +24,9 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
 </script>
 
 <template>
-  <section class="sc-graph" aria-label="Pipeline">
+  <section class="sc-graph" :aria-label="tr('pipeline.label')">
     <p v-if="layout.steps.length === 0" class="empty">
-      No topology yet. Start a process: its first heartbeat sends the topology to the broker.
+      {{ tr('pipeline.empty') }}
     </p>
     <div v-else class="sc-graph__row">
       <div class="topics">
@@ -45,7 +47,7 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
           <div class="sc-label">Subtopology {{ step.id }}</div>
           <div class="sc-node__title">{{ sub(step.id).name }}</div>
           <div class="sc-node__meta">
-            <span>{{ sub(step.id).partitions }} tasks</span>
+            <span>{{ tr('pipeline.tasks', { n: sub(step.id).partitions }) }}</span>
             <span class="sc-mono" :data-testid="`lag-${step.id}`">lag {{ formatCount(group.flow?.lag[step.id]) }}</span>
           </div>
           <div class="sc-node__tasks">
@@ -53,7 +55,7 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
               v-for="t in tasksOf(group.tasks, step.id)"
               :key="t"
               :class="{ 'sc-unowned-cell': !owned.has(t) }"
-              :title="owned.has(t) ? `${t} active` : `${t} has no owner`"
+              :title="owned.has(t) ? t : `${t} — ${tr('tasks.unowned')}`"
             />
           </div>
           <div v-for="(store, k) in sub(step.id).stores" :key="store" class="sc-node__store">
@@ -70,7 +72,7 @@ const toggle = (id: string) => emit('select', props.selected === id ? null : id)
           </span>
         </span>
         <div v-if="i === layout.steps.length - 1 && step.out.length" class="topics">
-          <span v-for="t in step.out" :key="t" class="sc-topic">{{ t }}<small>sink</small></span>
+          <span v-for="t in step.out" :key="t" class="sc-topic">{{ t }}<small>{{ tr('pipeline.sink') }}</small></span>
         </div>
       </template>
     </div>

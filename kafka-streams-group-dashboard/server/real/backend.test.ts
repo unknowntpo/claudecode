@@ -71,6 +71,29 @@ describe('RealBackend failures', () => {
     inspector.stop(true)
   })
 
+  test('CV12: a killed process reports a growing time since its last heartbeat', async () => {
+    const member = {
+      memberId: 'm-1', memberEpoch: 3, processId: 'uuid-1', clientId: 'word-count-process-A-StreamThread-1-consumer',
+      assignment: { active: ['0_0'], standby: [], warmup: [] }, targetAssignment: { active: ['0_0'], standby: [], warmup: [] },
+    }
+    const inspector = Bun.serve({ port: 0, fetch: () => Response.json({ groups: [{ ...group, members: [member] }] }) })
+    // /bin/cat waits on stdin like a real streams-app run, so the process stays alive until killed
+    backend = new RealBackend({ bin: '/bin/cat', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    await backend.handle({ type: 'addMember', groupId: 'word-count' })
+    await backend.tick({ force: true })
+    const silent = () => backend!.snapshot().groups.find((g) => g.groupId === 'word-count')!.members[0]
+    expect(silent().status).toBe('alive') // positive control: not killed yet, no duration
+    expect(silent().msSinceHeartbeat).toBe(0)
+    await backend.handle({ type: 'killProcess', groupId: 'word-count', processId: 'process-A' })
+    await Bun.sleep(30)
+    const first = silent().msSinceHeartbeat
+    await Bun.sleep(30)
+    expect(silent().status).toBe('crashed')
+    expect(first).toBeGreaterThan(0)
+    expect(silent().msSinceHeartbeat).toBeGreaterThan(first)
+    inspector.stop(true)
+  })
+
   test('RB10: an inspector that accepts but never answers is reported within the poll timeout', async () => {
     const hung = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })
     backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${hung.port}`, pollTimeoutMs: 200 })

@@ -46,3 +46,17 @@ that alters behavior.
 | Process actions | `.sc-matrix thead .sc-button` (`+ thread`, `stop`, `kill`) | `addMember` / `stopProcess` / `killProcess` | RB4, RB7, RB8 |
 | Config table | `.sc-config` | `group.configs` | CS5 |
 | Coordinator log | `.sc-log li` | `group.events` | RB15 |
+
+## UI (Spec 003, console v2)
+
+| Element | Selector | Data | Covered by |
+| --- | --- | --- | --- |
+| Route | URL hash `#/`, `#/group/<id>` | `parseRoute` | CV6 |
+| Sidebar group item | `[data-testid=nav-<id>]` (`aria-current="page"`) | `sortGroups`, `isBehind` | CV1, CV2 |
+| Language toggle | `[data-testid=lang-en]`, `[data-testid=lang-zh-Hant]` (`aria-pressed`) | `useI18n`, `detectLang` | CV5, CV7, CV8 |
+| Overview row | `[data-testid=row-<id>]` | `sortGroups`, `maxLag` | CV1, CV11 |
+| Crash alert | `[data-testid=crash-alert]` | `processCards` | CV4, CV10 |
+| Total input rate | `[data-testid=total-rate]` | sum of `flow.inputRate` | CV14 |
+| Inspector tabs | `[data-testid=tab-tasks|tab-processes|tab-config|tab-log]` | — | CV14 |
+| Subtopology drawer | `[data-testid=drawer]` (Escape closes) | `taskRows`, `drawerSubtopology` | CV3, CV9 |
+| Process card | `[data-testid=process-<label>]`, `.sc-process--crashed` | `processCards`, `msSinceHeartbeat` | CV4, CV10, CV12 |

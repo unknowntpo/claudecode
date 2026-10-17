@@ -21,6 +21,7 @@ interface StreamsProcess {
   label: string
   proc: Subprocess<'pipe', 'inherit', 'inherit'>
   killed: boolean
+  killedAt?: number
 }
 
 export interface RealBackendOptions {
@@ -80,6 +81,8 @@ export class RealBackend implements Backend {
           {
             joining: mine.filter((p) => !p.killed && !listed.has(p.label)).map((p) => p.label),
             killed: new Set(mine.filter((p) => p.killed).map((p) => p.label)),
+            killedAt: new Map(mine.flatMap((p) => (p.killedAt === undefined ? [] : [[p.label, p.killedAt] as const]))),
+            now: Date.now(),
           },
           this.events.get(id) ?? [],
           this.flows.get(id) ?? null,
@@ -111,6 +114,7 @@ export class RealBackend implements Backend {
         if (!p || p.killed) return
         p.proc.kill('SIGKILL')
         p.killed = true
+        p.killedAt = Date.now()
         this.log(msg.groupId, 'member', `${msg.processId}: SIGKILL (no more heartbeats, fenced after the session timeout)`)
         return
       }
@@ -169,12 +173,13 @@ export class RealBackend implements Backend {
     this.labelSeq.set(groupId, n + 1)
     const label = `process-${String.fromCharCode(65 + n)}`
     const proc = Bun.spawn([this.bin, 'run', groupId, label, '1'], { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' })
-    const entry = { groupId, label, proc, killed: false }
+    const entry: StreamsProcess = { groupId, label, proc, killed: false }
     this.processes.set(`${groupId}/${label}`, entry)
     // A JVM that dies on its own is treated like a killed process until the broker fences it.
     proc.exited.then((code) => {
       if (this.processes.get(`${groupId}/${label}`) !== entry || entry.killed) return
       entry.killed = true
+      entry.killedAt = Date.now()
       this.log(groupId, 'member', `${label}: exited unexpectedly (code ${code})`)
     })
     this.log(groupId, 'member', `${label}: started JVM (pid ${proc.pid}, group.protocol=streams, 1 StreamThread)`)

@@ -53,6 +53,9 @@ export interface ProcessContext {
   joining: string[]
   /** Labels of processes that were SIGKILLed but are still listed by the broker. */
   killed: Set<string>
+  /** When each killed process was killed (Spec 003 CV12); the broker does not report heartbeats. */
+  killedAt?: Map<string, number>
+  now?: number
 }
 
 /** `word-count-process-A-StreamThread-1-consumer` → `process-A`; falls back to the broker's processId. */
@@ -106,7 +109,7 @@ export function toGroupView(
         warmup: minus(m.assignment.warmup, m.targetAssignment.warmup),
       },
       target: toAssignment(m.targetAssignment),
-      msSinceHeartbeat: 0,
+      msSinceHeartbeat: ctx.killedAt?.has(label) ? Math.max(0, (ctx.now ?? Date.now()) - ctx.killedAt.get(label)!) : 0,
     }
   })
   const present = new Set(members.map((m) => m.processId))
