@@ -23,7 +23,6 @@ const { tr } = useI18n()
         </tr>
       </tbody>
     </table>
-    <p class="note">{{ tr('group.standbyNote') }}</p>
   </div>
 </template>
 

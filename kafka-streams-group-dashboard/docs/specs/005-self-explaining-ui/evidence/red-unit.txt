@@ -1,0 +1,4 @@
+(fail) self-explaining UI > SX1: no hint or note texts; the standby rule lives in a tip in both languages [3.39ms]
+(fail) self-explaining UI > SX3: empty states name the empty thing only [0.35ms]
+ 0 pass
+ 2 fail

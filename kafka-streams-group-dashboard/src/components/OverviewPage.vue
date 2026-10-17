@@ -48,7 +48,7 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
       <div class="sc-metrics">
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.groups') }}</span><span class="sc-metric__value">{{ groups.length }}</span>
-          <span class="sc-metric__note">{{ tr('metric.groupsNote', { stable, moving }) }}</span>
+          <span class="sc-metric__note">{{ tr('metric.groupsSummary', { stable, moving }) }}</span>
         </div>
         <div class="sc-metric">
           <span class="sc-label">{{ tr('metric.processes') }}</span><span class="sc-metric__value">{{ processTotal }}</span>
@@ -104,7 +104,6 @@ const open = (g: GroupView) => emit('navigate', { page: 'group', groupId: g.grou
           </tbody>
         </table>
       </section>
-      <p class="hint">{{ tr('overview.hint') }}</p>
     </template>
   </main>
 </template>

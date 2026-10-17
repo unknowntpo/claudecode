@@ -7,6 +7,7 @@ import { type Key, useI18n } from '../i18n'
 import AssignmentMatrix from './AssignmentMatrix.vue'
 import ConfigTable from './ConfigTable.vue'
 import EventLog from './EventLog.vue'
+import InfoTip from './InfoTip.vue'
 import PipelineGraph from './PipelineGraph.vue'
 import ProcessCards from './ProcessCards.vue'
 import SubtopologyDrawer from './SubtopologyDrawer.vue'
@@ -55,9 +56,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 <option v-for="n in [0, 1, 2]" :key="n" :value="n">{{ n }}</option>
               </select>
             </label>
+            <InfoTip :text="tr('tip.standby')" />
           </div>
         </div>
-        <small class="note" data-testid="standby-note">{{ tr('group.standbyNote') }}</small>
       </header>
 
       <div class="sc-metrics">
@@ -92,7 +93,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
         <template v-if="tab === 'tasks'">
           <AssignmentMatrix :group="group" :selected="selected" />
-          <p class="note">{{ tr('tasks.hint') }}</p>
         </template>
         <ProcessCards v-else-if="tab === 'processes'" :group="group" />
         <ConfigTable v-else-if="tab === 'config'" :configs="group.configs" />

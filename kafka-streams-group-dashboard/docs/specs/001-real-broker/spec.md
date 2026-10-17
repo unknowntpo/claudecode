@@ -184,7 +184,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 ### Observability
 - RB14: [deploy] snapshot `error` is shown as a banner in the dashboard (checked in the running local app by the verifier).
 - RB15: event rows below: joins, leaves, state / epoch / target epoch changes, member assignment changes; no events when nothing changed.
-- RB16: [deploy] the standby selector says the change applies at the next rebalance (checked in the running local app).
+- RB16: [deploy] (Spec 005: as an InfoTip, SX2) the standby selector says the change applies at the next rebalance (checked in the running local app).
 
 ### Test plan: mapping (RB6, RB12)
 
