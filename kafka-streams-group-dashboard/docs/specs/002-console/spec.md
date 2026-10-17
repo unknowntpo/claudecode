@@ -95,6 +95,7 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
 | id | case | subtopologies | sinks | expected |
 | --- | --- | --- | --- | --- |
 | CS1 | word-count: two subtopologies joined by a repartition topic | 1:rep>;0:text-lines>rep | word-counts | [text-lines] → 0 → [rep] → 1 → [word-counts] |
+| CS1 | ids opposite to the data flow: 0 reads the repartition topic 1 writes | 0:rep>;1:text-lines>rep | out | [text-lines] → 1 → [rep] → 0 → [out] |
 | CS1 | order-enrichment: two source topics into one node (join) | 0:orders,customers> | enriched-orders | [orders, customers] → 0 → [enriched-orders] |
 | CS1 | page-view-sessions: one stateful node | 0:page-views> | user-sessions | [page-views] → 0 → [user-sessions] |
 | CS1 | no topology yet (EMPTY group) |  | word-counts |  |
