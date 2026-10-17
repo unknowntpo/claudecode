@@ -77,12 +77,12 @@ word-count, one process, producer at 5 lines/s (values illustrate the shape; the
 - CS2: rate rows below.
 - CS3: lag rows below.
 - CS4: selecting subtopology 1 → the Tasks tab lists only `1_x` tasks; no selection → all tasks.
-- CS5: inspector running → `GET /groups?ids=word-count` → `topics` lists `text-lines` (source), the repartition, changelog and `word-counts` (sink) topics; `configs` lists the three keys, `streams.session.timeout.ms` with source `group`.
+- CS5: inspector running → `GET /groups?ids=word-count` → `topics` lists `text-lines` (source), the repartition and changelog topics (no sink topics since Spec 004); `configs` lists the three keys, `streams.session.timeout.ms` with source `group`.
 
 ### Failure and retry
 - CS6: one word-count instance running → within 30 s the `text-lines` rate is > 0 and the changelog end offset increases (records flow through both subtopologies; sink topics are not reported since Spec 004).
 - CS7: inspector unreachable on a poll → every rate becomes `null` (shown as "—"), never 0.
-- CS8: the only instance is killed (`docker compose kill`) → within 15 s Subtopology 0 lag is larger than before the kill.
+- CS8: one of two instances is killed (`docker kill <container>`) → within 15 s Subtopology 0 lag is larger than before the kill.
 - CS9: a topic that does not exist yet → its rate is `null` and the graph still renders (rows below).
 - CS10: the first poll after start → all rates `null` (rows below).
 

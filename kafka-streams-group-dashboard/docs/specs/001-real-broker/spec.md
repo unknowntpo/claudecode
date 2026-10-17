@@ -167,7 +167,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 - RB3: (Spec 004: instances are docker compose services) no instances → `docker compose up -d --scale word-count=2`, wait for STABLE → each of `0_0..0_3`, `1_0..1_3` is active on exactly one member, and both processes own at least one task.
 - RB4: (Spec 004: thread count is the app's own config) an instance started with 2 StreamThreads (`STREAM_THREADS=2`) → two members with the same process label within 20 s.
 - RB5: two instances STABLE → set standby replicas to 1, then scale to a third instance (next rebalance) → each stateful task (`1_x`) has exactly one standby, on a different process than its active; stateless tasks (`0_x`) have none.
-- RB6: mapping rows below (process label, derived member state, pending revocation, crashed status).
+- RB6: mapping rows below (process label, derived member state, pending revocation; stalled status since Spec 004).
 
 ### Failure and retry
 - ~~RB7~~ superseded by Spec 004 RO5: the console no longer kills processes, so it no longer shows `crashed`.
@@ -202,6 +202,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 | RB6 | client.id equal to the app id falls back | \| | \| | word-count | no | STABLE | uuid-1 | STABLE | \| | alive | STABLE |
 | RB6 | no label before -StreamThread: the rest is kept, never empty | \| | \| | word-count--StreamThread-1-consumer | no | STABLE | -StreamThread-1-consumer | STABLE | \| | alive | STABLE |
 | RO2 | a compose container label is cut to its service and index | \| | \| | word-count-kafka-streams-group-dashboard-word-count-2-StreamThread-1-consumer | no | STABLE | word-count-2 | STABLE | \| | alive | STABLE |
+| RO2 | an app id inside another word of the label is not cut | \| | \| | word-count-myword-count-1-StreamThread-1-consumer | no | STABLE | myword-count-1 | STABLE | \| | alive | STABLE |
 | RO4 | owns a stalled active task | 0_0\| | 0_0\| | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | stalled | STABLE |
 | RO4 | holds a stalled task only as standby: not stalled | \|0_0 | \|0_0 | word-count-process-A-StreamThread-1-consumer | yes | STABLE | process-A | STABLE | \| | alive | STABLE |
 | RB12 | broker state NOT_READY (missing source topics) | \| | \| | word-count-process-A-StreamThread-1-consumer | no | NOT_READY | process-A | STABLE | \| | alive | NOT_READY |
@@ -217,7 +218,7 @@ E2E items run against `docker compose up -d` (Kafka 4.1.0, heartbeat 2 s, sessio
 | RB15 | none |  |  |
 | RB15 | first poll | member | m-1 joined (process-A |
 | RB15 | member joined | member | m-2 joined (process-B |
-| RB15 | member left | member | m-1 left / fenced (process-A) |
+| RB15 | member left |  |  |
 | RB15 | group state changed | epoch | STABLE → RECONCILING |
 | RB15 | group epoch bumped | epoch | group epoch → 4 |
 | RB15 | target assignment epoch bumped | assignor | target assignment epoch 4 |

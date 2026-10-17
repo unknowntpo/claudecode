@@ -45,7 +45,7 @@ container per demo app; `docker compose up -d --scale word-count=2` adds a secon
 1. **Demo workload** (`docker-compose.yml`, not the console): services `kafka`, `setup` (creates source topics
    and sets `streams.session.timeout.ms=10000`, `streams.heartbeat.interval.ms=2000` for the demo groups, then
    exits), `producer` (the demo records of Spec 002 Behavior 1), and `word-count`, `order-enrichment`,
-   `page-view-sessions`, each running `streams-app run <app>` with `client.id = <app>-<container hostname>` and
+   `page-view-sessions`, each running `streams-app run <app>` with `client.id = <app>-<container name>` (Behavior 5) and
    scalable. `streams-app` keeps its `run` and `inspect` modes; `inspect` no longer produces, creates topics or
    sets configs.
 2. **Discovery**: the inspector lists streams groups (`listGroups`, type STREAMS) on each `GET /groups` and
@@ -54,12 +54,14 @@ container per demo app; `docker compose up -d --scale word-count=2` adds a secon
    `RealBackend` spawning). It keeps the standby selector (`POST /groups/<id>/standby`).
 4. **Stalled and fenced** replace console-known crashes (human, 2026-10-18). For each task (subtopology `s`,
    partition `p`) its input is partition `p` of the subtopology's source and repartition topics.
-   - **Progress**: per task, the console remembers when its committed offset last changed. A task is
-     **stalled** when its committed offset has not changed for longer than the stall threshold *and* some input
-     end offset grew in that time (idle input is never stalled). The clock restarts when the task's active owner
+   - **Progress**: per task, the console remembers when unprocessed input started waiting: the first poll since
+     the last commit at which the input end offset is beyond the committed offset. A task is **stalled** when
+     that input has waited longer than the stall threshold without a commit. Idle input never starts the clock
+     (the verifier found, 2026-10-18, that measuring from the last commit flagged an idle partition as stalled
+     for minutes as soon as one record arrived). The clock restarts when the task's active owner
      changes: a new owner restores state before it commits (found in the first E2E run, 2026-10-18: right after a
      scale-up, freshly moved tasks looked stalled). The threshold is 3 × the group's observed commit
-     interval (median time between committed-offset changes across its tasks), at least 5 s; 5 s until an
+     interval (lower median of the last 50 times between committed-offset changes across its tasks), at least 5 s; 5 s until an
      interval is observed.
    - A member owning a stalled active task is `stalled` (amber, `!` on the task), with "no progress for N s"
      (N = the longest stall among its tasks).
@@ -115,11 +117,14 @@ container per demo app; `docker compose up -d --scale word-count=2` adds a secon
 | id | case | input | next | expected |
 | --- | --- | --- | --- | --- |
 | RO4 | committing every second | 0:0/0 1000:5/5 2000:10/10 3000:15/15 4000:20/20 5000:25/25 6000:30/30 |  | ok (threshold 5000) |
-| RO4 | frozen 6.5 s while input grows | 0:0/0 1000:5/5 2000:5/8 4000:5/15 7500:5/30 |  | stalled 6500 (threshold 5000) |
+| RO4 | backlog waiting 5.5 s while input grows | 0:0/0 1000:5/5 2000:5/8 4000:5/15 7500:5/30 |  | stalled 5500 (threshold 5000) |
+| RO4 | an idle partition gets one record after a minute: not stalled at once | 0:0/0 1000:5/5 60000:5/5 61000:5/6 |  | ok (threshold 5000) |
+| RO4 | backlog waiting exactly the threshold is not stalled yet | 0:0/0 1000:5/5 2000:5/6 7000:5/9 |  | ok (threshold 5000) |
+| RO4 | end offset unknown | 0:0/0 1000:5/- 9000:5/- |  | ok (threshold 5000) |
 | RO4 | frozen while input is idle too | 0:0/0 1000:5/5 4000:5/5 8000:5/5 |  | ok (threshold 5000) |
 | RO4 | frozen 4 s while input grows: below 5 s | 0:0/0 1000:5/5 5000:5/20 |  | ok (threshold 5000) |
 | RO4 | commit interval 3 s raises the threshold to 9 s: frozen 7 s is ok | 0:0/0 3000:5/5 6000:10/10 9000:15/15 16000:15/40 |  | ok (threshold 9000) |
-| RO4 | commit interval 3 s: frozen 10 s is stalled | 0:0/0 3000:5/5 6000:10/10 9000:15/15 19000:15/50 |  | stalled 10000 (threshold 9000) |
+| RO4 | commit interval 3 s: a backlog waiting 10 s is stalled | 0:0/0 3000:5/5 6000:10/10 9000:15/15 10000:15/16 20000:15/55 |  | stalled 10000 (threshold 9000) |
 | RO4 | committed offset unknown | 0:-/0 4000:-/10 9000:-/20 |  | ok (threshold 5000) |
 | RO4 | a new owner restarts the clock: restoring after a rebalance is not a stall | 0:0/0@a 1000:5/5@a 5000:5/20@b 9000:5/30@b |  | ok (threshold 5000) |
 | RO4 | the new owner stalls too once the threshold passes | 0:0/0@a 1000:5/5@a 5000:5/20@b 11000:5/40@b |  | stalled 6000 (threshold 5000) |

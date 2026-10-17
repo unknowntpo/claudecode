@@ -1,0 +1,14 @@
+Expected: "stalled 5500 (threshold 5000)"
+Received: "stalled 6500 (threshold 5000)"
+(fail) RO4: backlog waiting 5.5 s while input grows [0.06ms]
+Expected: "ok (threshold 5000)"
+Received: "stalled 60000 (threshold 5000)"
+(fail) RO4: an idle partition gets one record after a minute: not stalled at once
+Expected: "ok (threshold 5000)"
+Received: "stalled 6000 (threshold 5000)"
+(fail) RO4: backlog waiting exactly the threshold is not stalled yet
+Expected: "stalled 10000 (threshold 9000)"
+Received: "stalled 11000 (threshold 9000)"
+(fail) RO4: commit interval 3 s: a backlog waiting 10 s is stalled
+ 13 pass
+ 4 fail

@@ -92,31 +92,31 @@ describe('RealBackend failures', () => {
       stop: () => inspector.stop(true),
     }
   }
-  const sub = { id: '0', sourceTopics: ['text-lines'], repartitionSourceTopics: [], repartitionSinkTopics: [], stateChangelogTopics: [], partitions: 1 }
+  const sub = { id: '0', sourceTopics: ['text-lines'], repartitionSourceTopics: [], repartitionSinkTopics: [], stateChangelogTopics: [], partitions: 2 }
   const m = (memberId: string, label: string, active: string[]) => ({
     memberId, memberEpoch: 3, processId: `uuid-${memberId}`, clientId: `word-count-${label}-StreamThread-1-consumer`,
     assignment: { active, standby: [], warmup: [] }, targetAssignment: { active, standby: [], warmup: [] },
   })
   const wc = (members: ReturnType<typeof m>[], end: number, committed: number): InspectorGroup => ({
     ...group, subtopologies: [sub], members,
-    endOffsets: { 'text-lines': { '0': end } }, committedOffsets: { 'text-lines': { '0': committed } },
+    endOffsets: { 'text-lines': { '0': end, '1': 5 } }, committedOffsets: { 'text-lines': { '0': committed, '1': 5 } },
   })
 
   test('RO11: a stalled process that disappears is fenced and its card stays 60 s', async () => {
     const h = harness()
     backend = h.backend
-    h.set([wc([m('m1', 'a', []), m('m2', 'b', ['0_0'])], 10, 10)])
+    h.set([wc([m('m1', 'a', ['0_1']), m('m2', 'b', ['0_0'])], 10, 10)])
     await h.poll(0)
     for (let i = 1; i <= 7; i++) {
-      h.set([wc([m('m1', 'a', []), m('m2', 'b', ['0_0'])], 10 + i * 5, 10)]) // input grows, nothing commits
+      h.set([wc([m('m1', 'a', ['0_1']), m('m2', 'b', ['0_0'])], 10 + i * 5, 10)]) // input grows, nothing commits
       await h.poll(1000)
     }
     const g = () => backend!.snapshot().groups[0]
     expect(g().members.find((x) => x.memberId === 'm2')!.status).toBe('stalled') // positive control
-    h.set([wc([m('m1', 'a', ['0_0'])], 50, 10)])
+    h.set([wc([m('m1', 'a', ['0_0', '0_1'])], 50, 10)])
     await h.poll(1000)
     expect(g().fenced.map((f) => [f.processId, f.tasks])).toEqual([['b', ['0_0']]])
-    expect(g().events.map((e) => e.message).join('\n')).toContain('b fenced after no progress for 7 s')
+    expect(g().events.map((e) => e.message).join('\n')).toContain('b fenced after no progress for 6 s')
     await h.poll(59_000)
     expect(g().fenced).toHaveLength(1)
     await h.poll(1_500)

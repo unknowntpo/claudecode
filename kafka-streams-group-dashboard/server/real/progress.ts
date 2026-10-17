@@ -12,8 +12,11 @@ export interface TaskSample {
 }
 
 export interface GroupProgress {
-  /** Per task: the committed offset, when it last changed, and the input end offset at that moment. */
-  tasks: Record<string, { committed: number; changedAt: number; endAtChange: number; owner: string | null }>
+  /**
+   * Per task: the committed offset, when it last changed, its owner, and since when unprocessed input has been
+   * waiting (end > committed) without a commit; null while there is none.
+   */
+  tasks: Record<string, { committed: number; changedAt: number; backlogSince: number | null; owner: string | null }>
   /** Recent times between committed-offset changes (any task), newest last. */
   intervals: number[]
 }
@@ -40,11 +43,16 @@ export function stepProgress(
     if (s.committed === null) continue
     const known = tasks[s.task]
     const owner = s.owner ?? null
-    const restart = { committed: s.committed, changedAt: now, endAtChange: s.end ?? 0, owner }
+    const backlog = s.end !== null && s.end > s.committed
+    // a commit, a new owner or the first sample restarts the clock; a backlog left after it starts now
+    const restart = { committed: s.committed, changedAt: now, backlogSince: backlog ? now : null, owner }
     if (!known || known.owner !== owner) tasks[s.task] = restart
     else if (known.committed !== s.committed) {
       intervals.push(now - known.changedAt)
       tasks[s.task] = restart
+    } else if (known.backlogSince === null && backlog) {
+      // input arrived on an idle partition: the stall is measured from now, not from the last commit
+      tasks[s.task] = { ...known, backlogSince: now }
     }
   }
   while (intervals.length > MAX_INTERVALS) intervals.shift()
@@ -53,10 +61,10 @@ export function stepProgress(
   const stalledMs: Record<string, number> = {}
   for (const s of samples) {
     const known = tasks[s.task]
-    if (!known || s.end === null) continue
-    const quiet = now - known.changedAt
-    // idle input is never stalled: the end offset must have grown since the last commit
-    if (quiet > thresholdMs && s.end > known.endAtChange) stalledMs[s.task] = quiet
+    if (!known || known.backlogSince === null) continue
+    const waiting = now - known.backlogSince
+    // idle input is never stalled: only unprocessed records that wait past the threshold are
+    if (waiting > thresholdMs) stalledMs[s.task] = waiting
   }
   return { next: { tasks, intervals }, stalledMs, thresholdMs }
 }

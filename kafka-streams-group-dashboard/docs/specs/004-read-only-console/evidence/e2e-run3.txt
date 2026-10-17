@@ -1,0 +1,32 @@
+$ E2E=1 bun test e2e
+bun test v1.3.13 (bf2e2cec)
+READY 18085
+
+e2e/real-broker.test.ts:
+RB13 measured: STABLE 1945 ms after the second member joined
+RO5 measured: stalled 4819 ms after docker kill (threshold 5000 ms)
+RO5 measured: fenced 9952 ms after docker kill
+RO6 measured: left 16 ms after docker stop
+CS6 measured: flow seen in 320 ms
+CS11 / RO9 measured: slowest 13.1 ms of 20
+org.apache.kafka.common.KafkaException: Failed to find brokers to send ListGroups
+	at org.apache.kafka.clients.admin.KafkaAdminClient$22.handleFailure(KafkaAdminClient.java:3566)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$Call.handleTimeoutFailure(KafkaAdminClient.java:959)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$Call.fail(KafkaAdminClient.java:925)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$TimeoutProcessor.handleTimeouts(KafkaAdminClient.java:1051)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.timeoutPendingCalls(KafkaAdminClient.java:1129)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.processRequests(KafkaAdminClient.java:1495)
+	at org.apache.kafka.clients.admin.KafkaAdminClient$AdminClientRunnable.run(KafkaAdminClient.java:1459)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: findAllBrokers
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id order-enrichment is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id page-view-sessions is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+[kafka-admin-client-thread | adminclient-1] ERROR org.apache.kafka.clients.admin.internals.DescribeStreamsGroupsHandler - [AdminClient clientId=adminclient-1] `DescribeStreamsGroups` response for group id word-count is missing the topology information
+
+ 13 pass
+ 0 fail
+ 55 expect() calls
+Ran 13 tests across 1 file. [107.78s]

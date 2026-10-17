@@ -61,6 +61,7 @@ export const testPlanRows: MappingCase[] = [
   row({ id: 'RB6', case: 'client.id equal to the app id falls back', assignment: '|', target: '|', clientId: 'word-count', expectedLabel: 'uuid-1', expectedMemberState: 'STABLE' }),
   row({ id: 'RB6', case: 'no label before -StreamThread: the rest is kept, never empty', assignment: '|', target: '|', clientId: 'word-count--StreamThread-1-consumer', expectedLabel: '-StreamThread-1-consumer', expectedMemberState: 'STABLE' }),
   row({ id: 'RO2', case: 'a compose container label is cut to its service and index', assignment: '|', target: '|', clientId: 'word-count-kafka-streams-group-dashboard-word-count-2-StreamThread-1-consumer', expectedLabel: 'word-count-2', expectedMemberState: 'STABLE' }),
+  row({ id: 'RO2', case: 'an app id inside another word of the label is not cut', assignment: '|', target: '|', clientId: 'word-count-myword-count-1-StreamThread-1-consumer', expectedLabel: 'myword-count-1', expectedMemberState: 'STABLE' }),
   row({ id: 'RO4', case: 'owns a stalled active task', assignment: '0_0|', target: '0_0|', stalled: true, expectedStatus: 'stalled', expectedMemberState: 'STABLE' }),
   row({ id: 'RO4', case: 'holds a stalled task only as standby: not stalled', assignment: '|0_0', target: '|0_0', stalled: true, expectedStatus: 'alive', expectedMemberState: 'STABLE' }),
   row({ id: 'RB12', case: 'broker state NOT_READY (missing source topics)', assignment: '|', target: '|', brokerState: 'NOT_READY', expectedGroupState: 'NOT_READY', expectedMemberState: 'STABLE' }),

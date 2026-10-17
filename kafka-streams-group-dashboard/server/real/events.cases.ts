@@ -24,7 +24,7 @@ export const testPlanRows: EventCase[] = [
   { id: 'RB15', change: 'none', expectedKinds: '', expectedMessageContains: '' },
   { id: 'RB15', change: 'first poll', expectedKinds: 'member', expectedMessageContains: 'm-1 joined (process-A' },
   { id: 'RB15', change: 'member joined', expectedKinds: 'member', expectedMessageContains: 'm-2 joined (process-B' },
-  { id: 'RB15', change: 'member left', expectedKinds: 'member', expectedMessageContains: 'm-1 left / fenced (process-A)' },
+  { id: 'RB15', change: 'member left', expectedKinds: '', expectedMessageContains: '' },
   { id: 'RB15', change: 'group state changed', expectedKinds: 'epoch', expectedMessageContains: 'STABLE → RECONCILING' },
   { id: 'RB15', change: 'group epoch bumped', expectedKinds: 'epoch', expectedMessageContains: 'group epoch → 4' },
   { id: 'RB15', change: 'target assignment epoch bumped', expectedKinds: 'assignor', expectedMessageContains: 'target assignment epoch 4' },

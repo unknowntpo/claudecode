@@ -110,6 +110,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | id | case | groups | lag | rate | expected |
 | --- | --- | --- | --- | --- | --- |
 | CV1 | stalled member first, then transitional states, then the rest | word-count:STABLE pvs:STABLE:stalled orders:RECONCILING |  |  | pvs orders word-count |
+| CV1 | a fenced process in the last minute ranks first too | a:STABLE b:STABLE:fenced |  |  | b a |
 | CV1 | same rank sorts by id | zeta:STABLE alpha:STABLE |  |  | alpha zeta |
 | CV1 | ASSIGNING and NOT_READY rank with RECONCILING | b:STABLE a:NOT_READY c:ASSIGNING |  |  | a c b |
 | CV1 | EMPTY ranks with STABLE | b:EMPTY a:STABLE |  |  | a b |
@@ -154,6 +155,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 | CV4 | alive before stalled, threads with tasks in task order, active then standby | B/m2 stalled a=0_3 ms=6000 \| A/m1 alive a=0_1,0_0 s=0_3 |  | A alive [m1: 0_0A 0_1A 0_3S] \| B stalled 6s [m2: 0_3A] |
 | CV4 | alive first even when the stalled process sorts first by name | A/m1 stalled a=0_0 ms=7000 \| B/m2 alive a=0_1 |  | B alive [m2: 0_1A] \| A stalled 7s [m1: 0_0A] |
 | CV4 | one stalled thread makes its process stalled, with the longest stall | A/m1 alive a=0_0 \| A/m3 stalled a=0_1 ms=8000 |  | A stalled 8s [m1: 0_0A] [m3: 0_1A] |
+| CV4 | two stalled threads: the card shows the longest stall | A/m1 stalled a=0_0 ms=6000 \| A/m3 stalled a=0_1 ms=9000 |  | A stalled 9s [m1: 0_0A] [m3: 0_1A] |
 | CV4 | tasks sort by subtopology, then partition | A/m1 alive a=1_0,0_1 |  | A alive [m1: 0_1A 1_0A] |
 | CV4 | alive processes sort by label | B/m2 alive a=0_1 \| A/m1 alive a=0_0 |  | A alive [m1: 0_0A] \| B alive [m2: 0_1A] |
 | CV4 | two threads in one process | A/m1 alive a=0_0 \| A/m3 alive a=0_1 |  | A alive [m1: 0_0A] [m3: 0_1A] |

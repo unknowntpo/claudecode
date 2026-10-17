@@ -94,6 +94,11 @@ describe('mapping', () => {
     expect(toGroupView(group({ members: [m] }), quiet, []).members[0].stalledMs).toBeNull() // positive control
   })
 
+  test('RO4: a subtopology without input topics has unknown offsets, not 0', () => {
+    const g = group({ subtopologies: [{ id: '0', sourceTopics: [], repartitionSourceTopics: [], repartitionSinkTopics: [], stateChangelogTopics: [], partitions: 1 }], members: [] })
+    expect(taskSamples(g)).toEqual([{ task: '0_0', committed: null, end: null, owner: null }])
+  })
+
   test('RO4: task samples sum the input partitions of each task', () => {
     const g = group({
       endOffsets: { 'text-lines': { '0': 10, '1': 20 }, 'word-count-counts-store-repartition': { '0': 5, '1': 7 } },

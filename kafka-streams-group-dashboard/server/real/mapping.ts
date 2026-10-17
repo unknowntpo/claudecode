@@ -187,9 +187,7 @@ export function diffEvents(prev: InspectorGroup | undefined, next: InspectorGrou
   for (const m of next.members)
     if (!before.has(m.memberId))
       events.push({ kind: 'member', message: `${m.memberId} joined (${processLabel(next.groupId, m)}, ${m.clientId})` })
-  for (const m of prev?.members ?? [])
-    if (!after.has(m.memberId))
-      events.push({ kind: 'member', message: `${m.memberId} left / fenced (${processLabel(next.groupId, m)})` })
+  // departures are logged by the backend as "left" or "fenced" (Spec 004 RO11), never ambiguously here
 
   if (prev && prev.state !== next.state)
     events.push({ kind: 'epoch', message: `group state ${prev.state} → ${next.state}` })

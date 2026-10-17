@@ -132,6 +132,12 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     console.log(`RO5 measured: fenced ${stalledAfter + fencedAfter} ms after docker kill`)
     await waitFor('survivor owns everything', (g) => stable(1)(g) && partitioned(g), 25_000)
     expect(view()!.events.map((e) => e.message).join('\n')).toContain('word-count-2 fenced after no progress')
+    // the stall clears: the survivor that took the tasks over is never flagged (verifier, 2026-10-18)
+    for (let i = 0; i < 10; i++) {
+      await backend.tick({ force: true })
+      expect(view()!.members.filter((m) => m.status === 'stalled').map((m) => m.processId)).toEqual([])
+      await sleep(500)
+    }
   }, TIMEOUT)
 
   test('RO6: a stopped instance leaves at once, without stalling or a fenced card', async () => {

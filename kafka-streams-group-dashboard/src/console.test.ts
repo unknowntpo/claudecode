@@ -61,8 +61,9 @@ describe('order and behind', () => {
     if (row.id === 'CV1') {
       const groups = row.groups
         ? row.groups.split(' ').map((g) => {
-            const [groupId, state, stalled] = g.split(':')
-            return groupOf(stalled ? [member('B/m stalled a=0_0 ms=6000')] : [], { groupId, state: state as GroupState })
+            const [groupId, state, trouble] = g.split(':')
+            const fenced = trouble === 'fenced' ? [{ processId: 'B', fencedAt: 1, stalledMs: 9000, tasks: ['0_0'] }] : []
+            return groupOf(trouble === 'stalled' ? [member('B/m stalled a=0_0 ms=6000')] : [], { groupId, state: state as GroupState, fenced })
           })
         : []
       expect(sortGroups(groups).map((g) => g.groupId).join(' ')).toBe(row.expected)

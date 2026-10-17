@@ -4,7 +4,7 @@
 export interface ConsoleCase {
   id: string
   case: string
-  /** CV1: groups as "id:state[:stalled]" separated by spaces. */
+  /** CV1: groups as "id:state[:stalled|:fenced]" separated by spaces. */
   groups: string
   /** CV2: largest subtopology lag and input rate ("-" = unknown). */
   lag: string
@@ -17,6 +17,7 @@ const behind = (c: string, lag: string, rate: string, expected: 'behind' | 'ok')
 
 export const testPlanRows: ConsoleCase[] = [
   order('stalled member first, then transitional states, then the rest', 'word-count:STABLE pvs:STABLE:stalled orders:RECONCILING', 'pvs orders word-count'),
+  order('a fenced process in the last minute ranks first too', 'a:STABLE b:STABLE:fenced', 'b a'),
   order('same rank sorts by id', 'zeta:STABLE alpha:STABLE', 'alpha zeta'),
   order('ASSIGNING and NOT_READY rank with RECONCILING', 'b:STABLE a:NOT_READY c:ASSIGNING', 'a c b'),
   order('EMPTY ranks with STABLE', 'b:EMPTY a:STABLE', 'a b'),
