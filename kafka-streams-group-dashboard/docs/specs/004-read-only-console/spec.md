@@ -37,7 +37,7 @@ container per demo app; `docker compose up -d --scale word-count=2` adds a secon
 | after `--scale word-count=2` | word-count RECONCILING then STABLE, 2 processes, tasks split |
 | `docker kill …-word-count-2`, first ~10 s | broker still lists both members; tasks owned by `word-count-2` stop committing while input arrives: after the stall threshold they are **stalled** (amber `!`), the process card says "no progress for N s" |
 | after the session timeout | `word-count-2` disappears; because it was stalled, the log says "fenced after no progress for N s" and a grey **fenced** card stays on the Processes tab for 60 s listing the tasks it had and who took them; its tasks move to `word-count-1` |
-| `docker compose stop word-count-1` instead | it leaves at once without stalling: the log says "left"; no fenced card |
+| `docker stop kafka-streams-group-dashboard-word-count-1` instead | it leaves at once without stalling: the log says "left"; no fenced card |
 | a group nobody runs any more | EMPTY; still listed while the broker keeps it |
 
 ## Behavior
@@ -123,15 +123,19 @@ container per demo app; `docker compose up -d --scale word-count=2` adds a secon
 | RO4 | end offset unknown | 0:0/0 1000:5/- 9000:5/- |  | ok (threshold 5000) |
 | RO4 | frozen while input is idle too | 0:0/0 1000:5/5 4000:5/5 8000:5/5 |  | ok (threshold 5000) |
 | RO4 | frozen 4 s while input grows: below 5 s | 0:0/0 1000:5/5 5000:5/20 |  | ok (threshold 5000) |
+| RO4 | the threshold uses the lower median of unequal intervals | 0:0/0 1000:5/5 4000:10/10 5000:15/15 6000:15/16 12000:15/40 |  | stalled 6000 (threshold 5000) |
 | RO4 | commit interval 3 s raises the threshold to 9 s: frozen 7 s is ok | 0:0/0 3000:5/5 6000:10/10 9000:15/15 16000:15/40 |  | ok (threshold 9000) |
 | RO4 | commit interval 3 s: a backlog waiting 10 s is stalled | 0:0/0 3000:5/5 6000:10/10 9000:15/15 10000:15/16 20000:15/55 |  | stalled 10000 (threshold 9000) |
-| RO4 | committed offset unknown | 0:-/0 4000:-/10 9000:-/20 |  | ok (threshold 5000) |
+| RO4 | committed offset unknown | 0:-/0 4000:-/10 9500:-/20 |  | ok (threshold 5000) |
 | RO4 | a new owner restarts the clock: restoring after a rebalance is not a stall | 0:0/0@a 1000:5/5@a 5000:5/20@b 9000:5/30@b |  | ok (threshold 5000) |
+| RO4 | a backlog that waited under the old owner starts again under the new one | 0:0/0@a 1000:5/5@a 2000:5/10@a 8000:5/20@b 9000:5/30@b |  | ok (threshold 5000) |
 | RO4 | the new owner stalls too once the threshold passes | 0:0/0@a 1000:5/5@a 5000:5/20@b 11000:5/40@b |  | stalled 6000 (threshold 5000) |
 | RO4 | a stalled task that commits again recovers | 0:0/0 1000:5/5 7500:5/30 8000:30/31 |  | ok (threshold 5000) |
 | RO11 | nobody disappears | m1:A m2:B | m1 m2 |  |
 | RO11 | a member disappears without stalling: left | m1:A m2:B | m1 | B left |
 | RO11 | a member disappears after stalling: fenced | m1:A m2:B:stalled=9000 | m1 | B fenced 9000 |
+| RO11 | one stalled and one healthy thread of a process disappear: fenced | m1:A m2:B m3:B:stalled=9000 | m1 | B fenced 9000 |
+| RO11 | the same, listed the other way round | m1:A m3:B:stalled=9000 m2:B | m1 | B fenced 9000 |
 | RO11 | every member of a process disappears | m1:A m2:B:stalled=9000 m3:B:stalled=8000 | m1 | B fenced 9000 |
 <!-- test-plan:end -->
 
