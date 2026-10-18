@@ -27,6 +27,7 @@ export const testPlanRows: ReportCase[] = [
   formula('an end not above earliest: none', 'owner=500/500', '500', 'none'),
   formula('a standby report is not the restore of the active task', 'standby=314319/833228', '0', 'none'),
   formula('nothing reported: none', '', '0', 'none'),
+  formula('an offset without an end (on-disk state): none', 'owner=833525/-', '0', 'none'),
   polls('reported from the first poll, no waiting input: restoring, not stalled', '0:5/5@b#1000%100/1000 2000:5/5@b#1000%300/1000', 'restoring 2000 30%', 'start b'),
   polls('reported, then not: finished, no inference; a later backlog stalls from the finish', '0:0/0@a#1000 1000:5/5@a#1000 5000:5/20@b#1000%100/1000 7000:5/30@b#1000%900/1000 9000:5/40@b#1000 20000:5/60@b#1000', 'stalled 11000', 'start b, restored 4000'),
   polls('finished, then the first commit: ok', '0:0/0@a#1000 1000:5/5@a#1000 5000:5/20@b#1000%100/1000 7000:5/30@b#1000 8000:30/31@b#1000', 'ok', 'start b, restored 2000'),

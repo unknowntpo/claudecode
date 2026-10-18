@@ -231,5 +231,7 @@ describe('restore progress (Spec 007)', () => {
     expect(rows.map((r) => [r.task, r.progress])).toEqual([['1_0', { fraction: 0.59, ageMs: 12000 }], ['1_1', null]])
     const chips = processCards(g)[0].threads[0].tasks
     expect(chips.map((x) => [x.task, x.progress])).toEqual([['1_0', 0.59], ['1_1', null]])
+    const withStandby = view({ ...g, members: members('A/m1 restoring a=1_0 ms=3000 | B/m2 alive s=1_0') })
+    expect(processCards(withStandby).find((c) => c.processId === 'B')!.threads[0].tasks).toEqual([{ task: '1_0', role: 'standby', progress: null }])
   })
 })

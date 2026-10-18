@@ -9,7 +9,7 @@ const member = (memberId: string, active: string[], standby: string[], reports: 
   memberId, memberEpoch: 3, processId: `uuid-${memberId}`, clientId: `word-count-${memberId}-StreamThread-1-consumer`,
   assignment: { active, standby, warmup: [] }, targetAssignment: { active, standby, warmup: [] },
   taskOffsets: Object.fromEntries(Object.entries(reports).map(([t, [o]]) => [t, o])),
-  taskEndOffsets: Object.fromEntries(Object.entries(reports).map(([t, [, e]]) => [t, e])),
+  taskEndOffsets: Object.fromEntries(Object.entries(reports).flatMap(([t, [, e]]) => (Number.isNaN(e) ? [] : [[t, e]]))),
 })
 
 function formula(input: string, earliest: string): string {
@@ -56,4 +56,15 @@ test.each(testPlanRows)('$id: $case', (row) => {
   const state1 = restoring !== undefined ? `restoring ${restoring}${pct ? ` ${Math.round(pct.fraction * 100)}%` : ''}` : stalled !== undefined ? `stalled ${stalled}` : 'ok'
   expect(state1).toBe(row.expected)
   expect(log.join(', ')).toBe(row.log)
+})
+
+test('RP4: the report age grows while the reported value stays and restarts when it changes', () => {
+  let state: GroupProgress | undefined
+  const age: number[] = []
+  for (const [t, p] of [[0, 0.1], [30000, 0.1], [59000, 0.1], [61000, 0.5], [70000, 0.5]] as const) {
+    const r = stepProgress(state, t, [{ task: '1_0', committed: 5, end: 9, owner: 'b', changelog: 1000, progress: p }])
+    state = r.next
+    age.push(r.progress['1_0'].ageMs)
+  }
+  expect(age).toEqual([0, 30000, 59000, 0, 9000])
 })

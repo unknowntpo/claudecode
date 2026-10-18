@@ -51,7 +51,8 @@ Same kill against a Kafka 4.1 client: nothing reported, Spec 006 applies (↻ wi
    offsets (0 when unknown). No progress when the offset is negative (unknown), the end is not above earliest,
    or the owner does not report `t`. Reports of standbys and of non-owners are ignored here.
 4. **Restoring**: a task with progress is restoring, from the first poll and with or without waiting input,
-   and never stalled. A task its current owner reported before and no longer reports has finished: not
+   and never stalled. Its seconds count from the owner change when the console saw one, else from the first
+   report. A task its current owner reported before and no longer reports has finished: not
    restoring, and the inference of Spec 006 does not apply to it until its owner changes. A task its owner never
    reported follows Spec 006. Once the owner has committed the task it is running: a report still seen then is
    stale (reports lag by up to one interval) and is ignored until the owner changes (found on the running demo,
@@ -103,6 +104,7 @@ Same kill against a Kafka 4.1 client: nothing reported, Spec 006 applies (↻ wi
 | RP2 | an end not above earliest: none | owner=500/500 | 500 | none |  |
 | RP2 | a standby report is not the restore of the active task | standby=314319/833228 | 0 | none |  |
 | RP2 | nothing reported: none |  | 0 | none |  |
+| RP2 | an offset without an end (on-disk state): none | owner=833525/- | 0 | none |  |
 | RP3 | reported from the first poll, no waiting input: restoring, not stalled | 0:5/5@b#1000%100/1000 2000:5/5@b#1000%300/1000 |  | restoring 2000 30% | start b |
 | RP3 | reported, then not: finished, no inference; a later backlog stalls from the finish | 0:0/0@a#1000 1000:5/5@a#1000 5000:5/20@b#1000%100/1000 7000:5/30@b#1000%900/1000 9000:5/40@b#1000 20000:5/60@b#1000 |  | stalled 11000 | start b, restored 4000 |
 | RP3 | finished, then the first commit: ok | 0:0/0@a#1000 1000:5/5@a#1000 5000:5/20@b#1000%100/1000 7000:5/30@b#1000 8000:30/31@b#1000 |  | ok | start b, restored 2000 |

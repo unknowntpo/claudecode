@@ -171,6 +171,20 @@ describe('RealBackend failures', () => {
     h.stop()
   })
 
+  test('RP4: the snapshot carries the restore progress the owner reports', async () => {
+    const h = harness()
+    backend = h.backend
+    const reporting = { ...m('m2', 'b', ['1_0']), taskOffsets: { '1_0': 300 }, taskEndOffsets: { '1_0': 1166 } }
+    h.set([stateful([m('m1', 'a', ['1_0'])], 10, 10)])
+    await h.poll(0)
+    h.set([stateful([reporting], 20, 10)])
+    await h.poll(1000)
+    const g = backend.snapshot().groups[0]
+    expect(Math.round(g.restoreProgress['1_0'].fraction * 100)).toBe(26)
+    expect(g.restoringTasks['1_0']).toBe(0)
+    h.stop()
+  })
+
   test('RS4: a process gone while restoring is logged so, without a fenced card', async () => {
     const h = harness()
     backend = h.backend
