@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: Draft (2026-10-18). Open decisions are marked **Decision**; specs start only after they are made.
+Status: Accepted (2026-10-18; D1–D4 decided by the human, D5–D6 open). Specs start from here.
 
 ## Where we are going
 
@@ -68,16 +68,16 @@ and managing cluster mirroring.
   There are no Admin APIs yet. Track trunk, and write the spec when its Admin APIs and RPCs are merged.
 - Mirroring needs more than one cluster in the console and in the demo (two compose clusters).
 
-## Decisions needed
+## Decisions
 
-| # | Decision | Options | Recommendation |
+| # | Decision | Options | Outcome |
 | --- | --- | --- | --- |
-| D1 | Product name and scope | keep "Streams Console" / rename (e.g. "Kafka Console") | Rename at phase 1, when the cluster screen lands |
-| D2 | Write model (phase 3, and 4b if it writes) | (a) the console's own Kafka principal + dry run + confirmation + audit log; (b) per-user identities passed through to Kafka ACLs | (a) first: simplest and auditable; (b) only if several operators with different rights use one console |
-| D3 | Multi-cluster | one cluster per console / a list of clusters | A list, introduced with phase 4a; phases 1–3 stay one cluster |
-| D4 | Balancing: build or integrate Cruise Control | (a) own analyzer on broker data (phase 2); (b) read proposals from an existing Cruise Control REST API; (c) both | (a), then optionally (b) for clusters that already run Cruise Control |
-| D5 | Where Admin logic lives | keep growing the Java inspector behind the Bun server / move the API into a Java service | Keep for phase 1, revisit when phase 3 adds writes |
-| D6 | Oldest supported Kafka | 4.1 (today) / 4.4 | Keep 4.1 working through principle 3; new features may require newer brokers |
+| D1 | Product name and scope | keep "Streams Console" / rename (e.g. "Kafka Console") | **Decided 2026-10-18**: rename at phase 1, when the cluster screen lands |
+| D2 | Write model (phase 3, and 4b if it writes) | (a) the console's own Kafka principal + dry run + confirmation + audit log; (b) per-user identities passed through to Kafka ACLs | **Decided 2026-10-18**: (a), the console's own principal with dry run, confirmation and audit log |
+| D3 | Multi-cluster | one cluster per console / a list of clusters | **Decided 2026-10-18**: a list, introduced with phase 4a; phases 1–3 stay one cluster |
+| D4 | Balancing: build or integrate Cruise Control | (a) own analyzer on broker data (phase 2); (b) read proposals from an existing Cruise Control REST API; (c) both | **Decided 2026-10-18**: (a), then optionally (b) for clusters that already run Cruise Control |
+| D5 | Where Admin logic lives | keep growing the Java inspector behind the Bun server / move the API into a Java service | Open. Recommendation: keep for phase 1, revisit when phase 3 adds writes |
+| D6 | Oldest supported Kafka | 4.1 (today) / 4.4 | Open. Recommendation: keep 4.1 working through principle 3; new features may require newer brokers |
 
 ## Not planned
 
@@ -86,4 +86,4 @@ and managing cluster mirroring.
 
 ## Next step
 
-Decide D1–D4, then write Spec 008 (cluster overview, phase 1 first cut).
+Write Spec 008: cluster overview, phase 1 first cut, including the rename (D1).
