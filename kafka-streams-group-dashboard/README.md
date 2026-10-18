@@ -47,7 +47,7 @@ bun run dev                    # 打開 http://localhost:5173
 
 ## 開發流程
 
-規格與驗收在 [`docs/specs/`](docs/specs/)，流程在 [`docs/process/workflow.md`](docs/process/workflow.md)。
+規格與驗收在 [`docs/specs/`](docs/specs/)，流程在 [`docs/process/workflow.md`](docs/process/workflow.md)。往 cluster 管理與 mirroring 擴展的計畫在 [`docs/roadmap.md`](docs/roadmap.md)。
 
 | 指令 | 用途 |
 | --- | --- |
