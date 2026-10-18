@@ -33,7 +33,8 @@ configuration table, and empty states that tell the reader what to do ("Start an
 1. No interface sentence explains how to read or use the console. Allowed text: labels, values, states, errors
    (what is wrong and how to fix it), and empty states that name the empty thing.
 2. `InfoTip`: an ⓘ button next to the control it explains; its text shows on hover and on keyboard focus,
-   is linked with `aria-describedby`, and hides on Escape or when focus leaves. Used for the standby selector only.
+   is linked with `aria-describedby`, and hides on Escape or when focus leaves. Used for the standby selector
+   (and, since Spec 006, the changelog column).
 3. Interaction is shown by affordance: pipeline nodes keep the pointer cursor, hover border and focus ring
    (unchanged), group rows keep the pointer cursor and hover background.
 

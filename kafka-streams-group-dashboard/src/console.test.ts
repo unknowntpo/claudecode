@@ -198,7 +198,7 @@ describe('restoring (Spec 006)', () => {
     expect([other.task, other.changelog, other.restoringMs]).toEqual(['0_0', undefined, null])
   })
 
-  test('RS5: process cards: stalled over restoring over alive, ordered alive, restoring, stalled; changelog total of active tasks', () => {
+  test('RS5: process cards: stalled over restoring over alive, ordered alive, restoring, stalled; changelog total of active tasks only', () => {
     const three = view({
       members: members('C/m3 stalled a=0_2 ms=9000 | A/m1 restoring a=1_0 ms=3000 | B/m2 alive a=0_1 | C/m4 restoring a=1_1 ms=1000'),
       stalledTasks: { '0_2': 9000 },
@@ -212,5 +212,7 @@ describe('restoring (Spec 006)', () => {
     ])
     const unknown = view({ members: members('A/m1 alive a=1_0,1_1'), changelog: { '1_0': 5, '1_1': null } })
     expect(processCards(unknown)[0].changelog).toBeNull()
+    const standby = view({ members: members('A/m1 alive a=1_0 s=1_1'), changelog: { '1_0': 5, '1_1': 7 } })
+    expect(processCards(standby)[0].changelog).toBe(5)
   })
 })

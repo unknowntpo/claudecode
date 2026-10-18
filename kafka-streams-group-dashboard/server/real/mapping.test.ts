@@ -182,5 +182,8 @@ describe('changelog size (Spec 006)', () => {
     expect(v.restoringTasks).toEqual({ '1_0': 3000 })
     expect([v.members[0].status, v.members[0].restoringMs]).toEqual(['restoring', 3000])
     expect(toGroupView({ ...g, members: [m] }, quiet, []).members[0].status).toBe('alive') // positive control
+    const both = member({ assignment: parse('1_0,1_1|'), targetAssignment: parse('1_0,1_1|') })
+    const v2 = toGroupView({ ...g, members: [both] }, { ...quiet, stalledTasks: { '1_0': 6000 }, restoringTasks: { '1_1': 3000 } }, [])
+    expect([v2.members[0].status, v2.members[0].stalledMs, v2.members[0].restoringMs]).toEqual(['stalled', 6000, 3000])
   })
 })
