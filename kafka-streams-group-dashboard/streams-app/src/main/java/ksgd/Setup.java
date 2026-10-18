@@ -27,7 +27,7 @@ final class Setup {
     /** Spec 002 source topics and partition counts. */
     static final Map<String, Integer> TOPICS = new LinkedHashMap<>();
     static {
-        TOPICS.put("text-lines", 4);
+        TOPICS.put("text-lines", 12); // enough tasks to see a rebalance move them
         TOPICS.put("orders", 3);
         TOPICS.put("customers", 3);
         TOPICS.put("page-views", 6);

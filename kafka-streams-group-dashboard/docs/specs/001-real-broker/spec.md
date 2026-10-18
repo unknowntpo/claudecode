@@ -105,7 +105,7 @@ and `group state RECONCILING → STABLE`.
 1. `streams-app run <appId> <label> <threads>` runs one Kafka Streams instance (one "process") with
    `group.protocol=streams`, `application.id=<appId>`, `client.id=<appId>-<label>`, a per-process
    `state.dir`; stdin `add-thread` calls `addStreamThread()`; SIGTERM closes it (members leave).
-2. `streams-app inspect <port>` on start creates the source topics if missing (`text-lines`=4, `orders`=3,
+2. `streams-app inspect <port>` on start creates the source topics if missing (`text-lines`=12 since 2026-10-18 (was 4; more tasks make a rebalance easier to follow), `orders`=3,
    `customers`=3, `page-views`=6 partitions) and sets the group configs `streams.session.timeout.ms=10000`,
    `streams.heartbeat.interval.ms=2000` for the three groups (the broker-level defaults are not applied, see
    Evidence), then serves:

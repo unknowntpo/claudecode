@@ -7,7 +7,9 @@ import { RealBackend } from '../server/real/backend'
 
 const INSPECTOR = 'http://localhost:18085'
 const GROUP = 'word-count'
-const ALL_TASKS = ['0_0', '0_1', '0_2', '0_3', '1_0', '1_1', '1_2', '1_3']
+const TEXT_LINES_PARTITIONS = 12
+const PARTITION_IDS = Array.from({ length: TEXT_LINES_PARTITIONS }, (_, p) => String(p))
+const ALL_TASKS = ['0', '1'].flatMap((s) => PARTITION_IDS.map((p) => `${s}_${p}`)).sort()
 const DEMO_GROUPS = ['order-enrichment', 'page-view-sessions', 'word-count']
 const PROJECT = 'kafka-streams-group-dashboard'
 const TIMEOUT = 180_000
@@ -72,9 +74,9 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=${GROUP}`)).json()).groups
     for (const key of ['groupId', 'state', 'groupEpoch', 'targetAssignmentEpoch', 'topologyEpoch', 'numStandbyReplicas', 'subtopologies', 'members', 'topics', 'committed', 'configs', 'endOffsets', 'committedOffsets'])
       expect(Object.keys(g)).toContain(key)
-    expect(g.subtopologies.map((s: { id: string; partitions: number }) => [s.id, s.partitions])).toEqual([['0', 4], ['1', 4]])
+    expect(g.subtopologies.map((s: { id: string; partitions: number }) => [s.id, s.partitions])).toEqual([['0', TEXT_LINES_PARTITIONS], ['1', TEXT_LINES_PARTITIONS]])
     expect(Object.keys(g.members[0])).toEqual(['memberId', 'memberEpoch', 'processId', 'clientId', 'assignment', 'targetAssignment'])
-    expect(Object.keys(g.endOffsets['text-lines']).sort()).toEqual(['0', '1', '2', '3'])
+    expect(Object.keys(g.endOffsets['text-lines']).sort()).toEqual([...PARTITION_IDS].sort())
   }, TIMEOUT)
 
   test('RB2: an unknown group is EMPTY', async () => {
