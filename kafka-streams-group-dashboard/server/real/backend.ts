@@ -31,6 +31,7 @@ interface GroupState {
   progress?: GroupProgress
   stalledTasks: Record<string, number>
   restoringTasks: Record<string, number>
+  restoreProgress: Record<string, { fraction: number; ageMs: number }>
   thresholdMs: number
   fenced: FencedProcess[]
   events: LogEvent[]
@@ -73,7 +74,7 @@ export class RealBackend {
       groups: [...this.groups.values()].map((s) =>
         toGroupView(
           s.group,
-          { stalledTasks: s.stalledTasks, restoringTasks: s.restoringTasks, thresholdMs: s.thresholdMs, fenced: s.fenced },
+          { stalledTasks: s.stalledTasks, restoringTasks: s.restoringTasks, restoreProgress: s.restoreProgress, thresholdMs: s.thresholdMs, fenced: s.fenced },
           s.events,
           s.flow ?? null,
         ),
@@ -127,7 +128,7 @@ export class RealBackend {
 
     for (const g of groups) {
       const prev = this.groups.get(g.groupId)
-      const state: GroupState = prev ?? { group: g, stalledTasks: {}, restoringTasks: {}, thresholdMs: stallThreshold([]), fenced: [], events: [] }
+      const state: GroupState = prev ?? { group: g, stalledTasks: {}, restoringTasks: {}, restoreProgress: {}, thresholdMs: stallThreshold([]), fenced: [], events: [] }
 
       for (const e of diffEvents(prev?.group, g)) this.log(g.groupId, e.kind, e.message, state)
 
@@ -162,6 +163,7 @@ export class RealBackend {
       state.progress = step.next
       state.stalledTasks = step.stalledMs
       state.restoringTasks = step.restoringMs
+      state.restoreProgress = step.progress
       state.thresholdMs = step.thresholdMs
       // RS4: restore start and end, by the task's owner
       const ownerOf = (task: string) => {

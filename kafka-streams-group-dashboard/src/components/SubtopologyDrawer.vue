@@ -12,6 +12,7 @@ const { tr } = useI18n()
 
 const rows = computed(() => taskRows(props.group, props.sub.id))
 const stateful = computed(() => props.sub.stateChangelogTopics.length > 0)
+const pct = (f: number) => Math.round(f * 100)
 const bound = (n: number | null | undefined) => (n == null ? '—' : n === 0 ? '0' : `≤ ${formatCount(n)}`)
 const inputs = computed(() => [...props.sub.sourceTopics, ...props.sub.repartitionSourceTopics])
 const outputs = computed(() => {
@@ -60,6 +61,10 @@ const inputRate = computed(() => {
               <span v-if="r.unowned" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
               <span v-else-if="r.stalledMs !== null" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(r.stalledMs / 1000) })">!</span>
               <span v-else-if="r.restoringMs !== null" class="restoring" :title="tr('tasks.restoring', { s: Math.round(r.restoringMs / 1000) })">↻ {{ Math.round(r.restoringMs / 1000) }} s</span>
+              <span v-if="r.progress" class="progress" data-testid="restore-progress">
+                <span class="bar" role="progressbar" :aria-valuenow="pct(r.progress.fraction)" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${pct(r.progress.fraction)}%` }" /></span>
+                {{ pct(r.progress.fraction) }} %<template v-if="r.progress.ageMs >= 10000"> · {{ tr('tasks.progressAge', { s: Math.round(r.progress.ageMs / 1000) }) }}</template>
+              </span>
             </td>
             <td>
               <template v-if="r.move"><span class="sc-chip sc-chip--revoking">A</span> {{ r.move }}</template>
@@ -72,7 +77,7 @@ const inputRate = computed(() => {
               <template v-if="r.standby.length"><span class="sc-chip sc-chip--standby">S</span> {{ r.standby.join(', ') }}</template>
               <template v-else>—</template>
             </td>
-            <td v-if="stateful" class="sc-num sc-mono" data-testid="changelog-size">{{ bound(r.changelog) }}</td>
+            <td v-if="stateful" class="sc-num sc-mono nowrap" data-testid="changelog-size">{{ bound(r.changelog) }}</td>
           </tr>
         </tbody>
       </table>
@@ -81,10 +86,15 @@ const inputRate = computed(() => {
 </template>
 
 <style scoped>
-.drawer { width: auto; flex: 1 1 360px; max-width: 420px; border-radius: 0; align-self: stretch; }
+.drawer { width: auto; flex: 1 1 360px; max-width: 480px; border-radius: 0; align-self: stretch; }
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
-.owner { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
+.owner { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); white-space: nowrap; }
 .stalled-mark { background: var(--state-revoking); }
 .restoring { color: var(--state-warmup); font-weight: 700; white-space: nowrap; }
+.nowrap { white-space: nowrap; }
+.progress { display: flex; align-items: center; gap: var(--space-1); font-size: 12px; color: var(--state-warmup); white-space: nowrap; }
+.bar { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: var(--state-warmup-bg); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--state-warmup); transition: width 0.4s; }
+@media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
 @media (max-width: 900px) { .drawer { max-width: none; flex-basis: 100%; border-left: 0; border-top: 1px solid var(--line); } }
 </style>

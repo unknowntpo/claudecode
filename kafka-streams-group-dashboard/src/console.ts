@@ -41,6 +41,8 @@ export interface TaskRow {
   restoringMs: number | null
   /** Changelog records a new owner replays at most; null unknown, undefined without a store (Spec 006). */
   changelog: number | null | undefined
+  /** Reported restore progress and its age (Spec 007); null when not reported. */
+  progress: { fraction: number; ageMs: number } | null
 }
 
 /** CV3: one row per task of a subtopology. */
@@ -60,6 +62,7 @@ export function taskRows(g: GroupView, subtopologyId: string): TaskRow[] {
         stalledMs: g.stalledTasks[task] ?? null,
         restoringMs: g.restoringTasks[task] ?? null,
         changelog: g.changelog[task],
+        progress: g.restoreProgress[task] ?? null,
       }
     })
 }
@@ -73,7 +76,8 @@ export interface ProcessCard {
   restoringMs: number | null
   /** Changelog total of its active stateful tasks: null if any is unknown, undefined if it has none (RS5). */
   changelog: number | null | undefined
-  threads: { memberId: string; memberEpoch: number; tasks: { task: TaskId; role: 'active' | 'standby' }[] }[]
+  /** Each task with its role, and the reported restore progress of an active one (Spec 007), else null. */
+  threads: { memberId: string; memberEpoch: number; tasks: { task: TaskId; role: 'active' | 'standby'; progress: number | null }[] }[]
 }
 
 const byTask = (a: TaskId, b: TaskId) => {
@@ -102,8 +106,8 @@ export function processCards(g: GroupView): ProcessCard[] {
           memberId: m.memberId,
           memberEpoch: m.memberEpoch,
           tasks: [
-            ...[...m.assignment.active].sort(byTask).map((task) => ({ task, role: 'active' as const })),
-            ...[...m.assignment.standby].sort(byTask).map((task) => ({ task, role: 'standby' as const })),
+            ...[...m.assignment.active].sort(byTask).map((task) => ({ task, role: 'active' as const, progress: g.restoreProgress[task]?.fraction ?? null })),
+            ...[...m.assignment.standby].sort(byTask).map((task) => ({ task, role: 'standby' as const, progress: null })),
           ],
         })),
       }

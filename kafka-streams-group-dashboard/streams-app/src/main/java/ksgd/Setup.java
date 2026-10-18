@@ -23,7 +23,8 @@ final class Setup {
     /** The broker-level group.streams.* defaults are not applied to new groups, so set them per group. */
     static final Map<String, String> GROUP_CONFIGS = Map.of(
             "streams.session.timeout.ms", "10000",
-            "streams.heartbeat.interval.ms", "2000");
+            "streams.heartbeat.interval.ms", "2000",
+            "streams.task.offset.interval.ms", "1000");
     /** Spec 002 source topics and partition counts. */
     static final Map<String, Integer> TOPICS = new LinkedHashMap<>();
     static {

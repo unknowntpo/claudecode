@@ -118,6 +118,8 @@ export interface GroupView {
   restoringTasks: Record<TaskId, number>
   /** Changelog records each stateful task replays at most; null when unknown (Spec 006). */
   changelog: Record<TaskId, number | null>
+  /** Restore progress its active owner reports (Spec 007, Kafka 4.4): 0–1, and ms since the value last changed. */
+  restoreProgress: Record<TaskId, { fraction: number; ageMs: number }>
 }
 
 export interface Snapshot {

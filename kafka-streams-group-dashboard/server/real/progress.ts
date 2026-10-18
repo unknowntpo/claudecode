@@ -11,6 +11,8 @@ export interface TaskSample {
   owner?: string | null
   /** Changelog records to replay at most (Spec 006); null when unknown, absent when the task has no store. */
   changelog?: number | null
+  /** Restore progress 0–1 its active owner reports (Spec 007, Kafka 4.4); absent when not reported. */
+  progress?: number
 }
 
 export interface GroupProgress {
@@ -31,6 +33,13 @@ interface TaskProgress {
   owner: string | null
   newOwner: boolean
   restoringSince: number | null
+  /** The current owner reported restore progress for it (Spec 007). */
+  reported: boolean
+  /** The current owner has committed: it runs, so a report still seen is stale (reports lag by an interval). */
+  committedSinceOwner: boolean
+  /** Last reported progress and when it last changed. */
+  lastProgress: number | null
+  progressChangedAt: number
 }
 
 const MIN_THRESHOLD_MS = 5000
@@ -58,8 +67,10 @@ export function stepProgress(
   restoringMs: Record<string, number>
   /** Tasks that started restoring at this poll. */
   restoreStarted: string[]
-  /** Tasks whose restore a commit ended at this poll: ms since the restore started. */
+  /** Tasks whose restore a commit (or the end of its reports) ended at this poll: ms since the restore started. */
   restoredMs: Record<string, number>
+  /** Reported restore progress (Spec 007) and ms since the reported value last changed. */
+  progress: Record<string, { fraction: number; ageMs: number }>
 } {
   const tasks = { ...(prev?.tasks ?? {}) }
   const intervals = [...(prev?.intervals ?? [])]
@@ -70,14 +81,17 @@ export function stepProgress(
     const owner = s.owner ?? null
     const backlog = s.end !== null && s.end > s.committed
     // a commit, a new owner or the first sample restarts the clock; a backlog left after it starts now
-    const restart = { committed: s.committed, changedAt: now, backlogSince: backlog ? now : null, owner, newOwner: false, restoringSince: null }
+    const restart: TaskProgress = {
+      committed: s.committed, changedAt: now, backlogSince: backlog ? now : null, owner, newOwner: false, restoringSince: null,
+      reported: false, committedSinceOwner: false, lastProgress: null, progressChangedAt: now,
+    }
     if (!known) tasks[s.task] = restart
     // nobody owning it is no new owner: the clock restarts, restoring waits for the next owner
     else if (known.owner !== owner) tasks[s.task] = { ...restart, newOwner: owner !== null }
     else if (known.committed !== s.committed) {
       intervals.push(now - known.changedAt)
       if (known.restoringSince !== null) restoredMs[s.task] = now - known.restoringSince
-      tasks[s.task] = restart
+      tasks[s.task] = { ...restart, committedSinceOwner: true }
     } else if (known.backlogSince === null && backlog) {
       // input arrived on an idle partition: the stall is measured from now, not from the last commit
       tasks[s.task] = { ...known, backlogSince: now }
@@ -89,9 +103,31 @@ export function stepProgress(
   const stalledMs: Record<string, number> = {}
   const restoringMs: Record<string, number> = {}
   const restoreStarted: string[] = []
+  const progress: Record<string, { fraction: number; ageMs: number }> = {}
   for (const s of samples) {
-    const known = tasks[s.task]
+    let known = tasks[s.task]
     if (!known) continue
+    // RP3: the owner's report decides first; once it stops, the restore has finished and nothing is inferred
+    if (s.progress !== undefined && !known.committedSinceOwner) {
+      const changed = known.lastProgress !== s.progress
+      if (known.restoringSince === null) restoreStarted.push(s.task)
+      known = tasks[s.task] = {
+        ...known,
+        reported: true,
+        lastProgress: s.progress,
+        progressChangedAt: changed ? now : known.progressChangedAt,
+        restoringSince: known.restoringSince ?? (known.newOwner ? known.changedAt : now),
+      }
+      restoringMs[s.task] = now - known.restoringSince!
+      progress[s.task] = { fraction: s.progress, ageMs: now - known.progressChangedAt }
+      continue
+    }
+    if (known.reported) {
+      if (known.restoringSince !== null) restoredMs[s.task] = now - known.restoringSince
+      const backlog = s.end !== null && s.committed !== null && s.end > s.committed
+      if (known.restoringSince !== null || known.newOwner)
+        known = tasks[s.task] = { ...known, restoringSince: null, newOwner: false, backlogSince: backlog ? now : null, lastProgress: null }
+    }
     const waiting = known.backlogSince === null ? null : now - known.backlogSince
     if (waiting !== null && known.newOwner && (s.changelog ?? 0) > 0) {
       restoringMs[s.task] = waiting
@@ -105,7 +141,7 @@ export function stepProgress(
     // idle input is never stalled: only unprocessed records that wait past the threshold are
     if (waiting !== null && waiting > thresholdMs) stalledMs[s.task] = waiting
   }
-  return { next: { tasks, intervals }, stalledMs, thresholdMs, restoringMs, restoreStarted, restoredMs }
+  return { next: { tasks, intervals }, stalledMs, thresholdMs, restoringMs, restoreStarted, restoredMs, progress }
 }
 
 export interface GoneProcess {

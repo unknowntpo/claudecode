@@ -45,6 +45,8 @@ async function instances(n: number, threads = 1) {
 
 describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
   beforeAll(async () => {
+    // killed or stopped instances left from a manual session would keep their numbers and shift the labels
+    await compose('rm', '-f', '-s', 'word-count')
     await compose('up', '-d', '--build', '--scale', 'word-count=1')
     backend = new RealBackend({ inspectorUrl: INSPECTOR })
     const start = Date.now()
@@ -75,7 +77,7 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     for (const key of ['groupId', 'state', 'groupEpoch', 'targetAssignmentEpoch', 'topologyEpoch', 'numStandbyReplicas', 'subtopologies', 'members', 'topics', 'committed', 'configs', 'endOffsets', 'committedOffsets'])
       expect(Object.keys(g)).toContain(key)
     expect(g.subtopologies.map((s: { id: string; partitions: number }) => [s.id, s.partitions])).toEqual([['0', TEXT_LINES_PARTITIONS], ['1', TEXT_LINES_PARTITIONS]])
-    expect(Object.keys(g.members[0])).toEqual(['memberId', 'memberEpoch', 'processId', 'clientId', 'assignment', 'targetAssignment'])
+    expect(Object.keys(g.members[0])).toEqual(['memberId', 'memberEpoch', 'processId', 'clientId', 'assignment', 'targetAssignment', 'taskOffsets', 'taskEndOffsets'])
     expect(Object.keys(g.endOffsets['text-lines']).sort()).toEqual([...PARTITION_IDS].sort())
   }, TIMEOUT)
 
@@ -86,6 +88,16 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     expect(Object.keys(g.startOffsets[changelog]).sort()).toEqual([...PARTITION_IDS].sort())
     for (const [p, start] of Object.entries(g.startOffsets[changelog]) as [string, number][])
       expect(start).toBeLessThanOrEqual(g.endOffsets[changelog][p])
+  }, TIMEOUT)
+
+  test('RP1: members carry reported task offsets, and the report interval is a group config', async () => {
+    const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=${GROUP}`)).json()).groups
+    for (const m of g.members) {
+      expect(typeof m.taskOffsets).toBe('object')
+      expect(typeof m.taskEndOffsets).toBe('object')
+    }
+    const interval = g.configs.find((c: { key: string }) => c.key === 'streams.task.offset.interval.ms')
+    expect([interval.value, interval.source]).toEqual(['1000', 'group'])
   }, TIMEOUT)
 
   test('RB2: an unknown group is EMPTY', async () => {

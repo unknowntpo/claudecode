@@ -41,6 +41,8 @@ bun run dev                    # 打開 http://localhost:5173
 
 **Changelog 與 restoring 從哪來**（Spec 006）：每個 stateful task 的 changelog 大小 = 該 partition 最新 − 最舊 offset，是新 owner 最多要重播的筆數（compaction 和本地 state 會讓實際更少）。task 換到新 owner 後、在它第一次 commit 前有 input 在等，就推論為 restoring，不算 stalled。Restore 進度和 buffer 記憶體 broker 看不到。
 
+**Restore 進度條**（Spec 007）：Kafka 4.4 起 member 會回報每個還沒追上的 task 的 changelog offset（KAFKA-20116），console 用它畫進度條；回報間隔由 broker / group 設定 `streams.task.offset.interval.ms`（預設 60 秒，demo 設 1 秒）。4.4 以前沒有回報，退回上面的推論。Demo 用 Kafka 4.4（broker image 暫用 `4.4.0-rc4`，Docker Hub 尚無 `4.4.0`）。
+
 **Broker 不知道的**：sink topic、processor 名稱和 DSL 不在 client 送給 broker 的 topology 裡，所以 pipeline 畫到最後一個 subtopology 為止。
 
 ## 開發流程

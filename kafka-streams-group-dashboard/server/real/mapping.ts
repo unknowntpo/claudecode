@@ -21,6 +21,9 @@ export interface InspectorMember {
   clientId: string
   assignment: InspectorAssignment
   targetAssignment: InspectorAssignment
+  /** Kafka 4.4 (Spec 007): changelog offset sums the member reports per task; absent before 4.4. */
+  taskOffsets?: Record<TaskId, number>
+  taskEndOffsets?: Record<TaskId, number>
 }
 
 export interface InspectorSubtopology {
@@ -61,6 +64,8 @@ export interface ProgressContext {
   fenced: FencedProcess[]
   /** Spec 006; absent means none. */
   restoringTasks?: Record<TaskId, number>
+  /** Spec 007; absent means none. */
+  restoreProgress?: Record<TaskId, { fraction: number; ageMs: number }>
 }
 
 /** One sample per task: its input is partition p of the subtopology's source and repartition topics. */
@@ -78,17 +83,24 @@ export function taskSamples(g: InspectorGroup): TaskSample[] {
     const inputs = [...s.sourceTopics, ...s.repartitionSourceTopics]
     return Array.from({ length: s.partitions }, (_, p) => {
       const task = `${s.id}_${p}`
+      const owner = g.members.find((m) => m.assignment.active.includes(task))
       const sample: TaskSample = {
         task,
         committed: sum(g.committedOffsets, inputs, p),
         end: sum(g.endOffsets, inputs, p),
-        owner: g.members.find((m) => m.assignment.active.includes(task))?.memberId ?? null,
+        owner: owner?.memberId ?? null,
       }
       // RS2: latest − earliest of the task's changelog partitions, an upper bound of what a new owner replays
       if (s.stateChangelogTopics.length) {
         const end = sum(g.endOffsets, s.stateChangelogTopics, p)
         const start = sum(g.startOffsets, s.stateChangelogTopics, p)
         sample.changelog = end === null || start === null ? null : end - start
+        // RP2: the active owner's own report, earliest subtracted, clamped; standby and other reports do not count
+        const offset = owner?.taskOffsets?.[task]
+        const reportedEnd = owner?.taskEndOffsets?.[task]
+        const earliest = start ?? 0
+        if (offset !== undefined && reportedEnd !== undefined && offset >= 0 && reportedEnd > earliest)
+          sample.progress = Math.min(1, Math.max(0, (offset - earliest) / (reportedEnd - earliest)))
       }
       return sample
     })
@@ -185,6 +197,7 @@ export function toGroupView(g: InspectorGroup, ctx: ProgressContext, events: Log
     stallThresholdMs: ctx.thresholdMs,
     fenced: ctx.fenced,
     restoringTasks,
+    restoreProgress: ctx.restoreProgress ?? {},
     changelog: Object.fromEntries(taskSamples(g).flatMap((x) => (x.changelog === undefined ? [] : [[x.task, x.changelog]]))),
   }
 }

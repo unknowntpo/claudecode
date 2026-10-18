@@ -67,7 +67,7 @@ const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
         <tr v-for="(t, i) in tasks" :key="t" :class="{ 'sc-split': i > 0 && subtopologyOf(t) !== subtopologyOf(tasks[i - 1]) }">
           <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
             <span v-else-if="stalled(t) !== undefined" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(stalled(t)! / 1000) })">!</span>
-            <span v-else-if="restoring(t) !== undefined" class="restoring-mark" :title="tr('tasks.restoring', { s: Math.round(restoring(t)! / 1000) })" data-testid="restoring-mark">↻</span></th>
+            <span v-else-if="restoring(t) !== undefined" class="restoring-mark" :title="tr('tasks.restoring', { s: Math.round(restoring(t)! / 1000) }) + (group.restoreProgress[t] ? ` · ${Math.round(group.restoreProgress[t].fraction * 100)}%` : '')" data-testid="restoring-mark">↻</span></th>
           <td v-for="m in members" :key="key(m)">
             <span v-if="cell(m, t)" :class="cell(m, t)!.cls" :title="cell(m, t)!.title">{{ cell(m, t)!.label }}</span>
           </td>

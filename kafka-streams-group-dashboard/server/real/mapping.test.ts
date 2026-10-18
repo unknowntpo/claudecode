@@ -187,3 +187,13 @@ describe('changelog size (Spec 006)', () => {
     expect([v2.members[0].status, v2.members[0].stalledMs, v2.members[0].restoringMs]).toEqual(['stalled', 6000, 3000])
   })
 })
+
+describe('restore progress fallback (Spec 007)', () => {
+  test('RP5: an inspector without taskOffsets (Kafka 4.1) gives no progress, and Spec 006 sizes stay', () => {
+    const CL = 'word-count-counts-store-changelog'
+    const g = group({ endOffsets: { [CL]: { '0': 1166, '1': 0 } }, startOffsets: { [CL]: { '0': 0, '1': 0 } } })
+    expect(taskSamples(g).every((x) => x.progress === undefined)).toBe(true)
+    const v = toGroupView(g, { ...quiet, restoringTasks: { '1_0': 3000 } }, [])
+    expect([v.restoreProgress, v.changelog, v.restoringTasks]).toEqual([{}, { '1_0': 1166, '1_1': 0 }, { '1_0': 3000 }])
+  })
+})

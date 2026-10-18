@@ -37,7 +37,7 @@ const restoring = (task: string) => props.group.restoringTasks[task] !== undefin
           <span class="sc-mono">epoch {{ th.memberEpoch }}</span>
         </div>
         <div class="sc-thread__tasks">
-          <span v-for="x in th.tasks" :key="x.task + x.role" class="sc-chip" :class="x.role === 'active' ? (restoring(x.task) ? 'sc-chip--warmup' : 'sc-chip--active') : 'sc-chip--standby'">{{ x.role === 'active' && restoring(x.task) ? `↻ ${x.task}` : x.task }}</span>
+          <span v-for="x in th.tasks" :key="x.task + x.role" class="sc-chip" :class="x.role === 'active' ? (restoring(x.task) ? 'sc-chip--warmup' : 'sc-chip--active') : 'sc-chip--standby'">{{ x.role === 'active' && restoring(x.task) ? `↻ ${x.task}${x.progress === null ? '' : ` ${Math.round(x.progress * 100)}%`}` : x.task }}</span>
         </div>
       </div>
       <p v-if="c.stalledMs" class="note warn">{{ tr('processes.stalled', { s: secs(c.stalledMs) }) }}</p>

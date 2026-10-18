@@ -50,7 +50,9 @@ final class Inspector {
     static final String STANDBY_KEY = "streams.num.standby.replicas";
     /** Spec 002: group configs reported in {@code configs}, in this order. */
     static final List<String> CONFIG_KEYS = List.of(
-            "streams.session.timeout.ms", "streams.heartbeat.interval.ms", STANDBY_KEY);
+            "streams.session.timeout.ms", "streams.heartbeat.interval.ms", STANDBY_KEY,
+            // Spec 007: how often members report task offsets (restore progress), Kafka 4.4
+            "streams.task.offset.interval.ms");
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private final Admin admin;
@@ -360,7 +362,16 @@ final class Inspector {
         o.put("clientId", m.clientId());
         o.put("assignment", assignment(m.assignment()));
         o.put("targetAssignment", assignment(m.targetAssignment()));
+        // Kafka 4.4 (KAFKA-20116): changelog offset sum per task as the member reports it; -2 = caught up
+        o.put("taskOffsets", taskOffsets(m.taskOffsets()));
+        o.put("taskEndOffsets", taskOffsets(m.taskEndOffsets()));
         return o;
+    }
+
+    private static Map<String, Long> taskOffsets(List<StreamsGroupMemberDescription.TaskOffset> offsets) {
+        Map<String, Long> out = new TreeMap<>();
+        for (var t : offsets) out.put(t.subtopologyId() + "_" + t.partition(), t.offset());
+        return out;
     }
 
     private static Map<String, Object> assignment(StreamsGroupMemberAssignment a) {

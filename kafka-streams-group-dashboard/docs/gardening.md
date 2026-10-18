@@ -21,3 +21,4 @@ Known workarounds and follow-ups. No new workaround lands without an entry; pref
 | Container labels come from a reverse DNS lookup inside the container; the console cuts the compose project prefix | Docker's hostname is the container id | set `client.id` from the orchestrator (e.g. a pod name) in a real deployment |
 | The console chrome still differs from the canvas: Pause bar at the top right, no "updated N s ago", sidebar foot "Broker" without the address | the address is not in the snapshot yet | add `bootstrap` to the snapshot |
 | Stalled detection misreads a task whose commit interval is longer than 3 × the group median | the threshold is one value per group | per-task thresholds if real apps mix commit intervals |
+| The demo broker runs `apache/kafka:4.4.0-rc4` (Spec 007) | Docker Hub had only RC images on 2026-10-18 while Maven and downloads.apache.org ship 4.4.0 | switch to `apache/kafka:4.4.0` once published |

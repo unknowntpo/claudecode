@@ -46,6 +46,7 @@ function view(over: Partial<GroupView> = {}): GroupView {
     fenced: [],
     restoringTasks: {},
     changelog: {},
+    restoreProgress: {},
     ...over,
   }
 }
@@ -214,5 +215,21 @@ describe('restoring (Spec 006)', () => {
     expect(processCards(unknown)[0].changelog).toBeNull()
     const standby = view({ members: members('A/m1 alive a=1_0 s=1_1'), changelog: { '1_0': 5, '1_1': 7 } })
     expect(processCards(standby)[0].changelog).toBe(5)
+  })
+})
+
+describe('restore progress (Spec 007)', () => {
+  test('RP4: drawer rows and process-card chips carry the percentage and the report age', () => {
+    const g = view({
+      members: members('A/m1 restoring a=1_0,1_1 ms=3000'),
+      restoringTasks: { '1_0': 3000, '1_1': 3000 },
+      changelog: { '1_0': 1000, '1_1': 1000 },
+      restoreProgress: { '1_0': { fraction: 0.59, ageMs: 12000 } },
+      tasks: ['1_0', '1_1'],
+    })
+    const rows = taskRows(g, '1')
+    expect(rows.map((r) => [r.task, r.progress])).toEqual([['1_0', { fraction: 0.59, ageMs: 12000 }], ['1_1', null]])
+    const chips = processCards(g)[0].threads[0].tasks
+    expect(chips.map((x) => [x.task, x.progress])).toEqual([['1_0', 0.59], ['1_1', null]])
   })
 })

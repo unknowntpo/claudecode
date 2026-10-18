@@ -1,0 +1,14 @@
+(fail) restore progress (Spec 007) > RP4: drawer rows and process-card chips carry the percentage and the report age [0.25ms]
+(fail) restore progress fallback (Spec 007) > RP5: an inspector without taskOffsets (Kafka 4.1) gives no progress, and Spec 006 sizes stay [0.26ms]
+(fail) RP2: the owner reports offset / end [0.36ms]
+(fail) RP2: the earliest offset is subtracted [0.06ms]
+(fail) RP2: earliest unknown counts as 0 [0.06ms]
+(fail) RP2: an offset beyond the end is 100 % [0.04ms]
+(fail) RP2: an offset below earliest is 0 % [0.05ms]
+(fail) RP3: reported from the first poll, no waiting input: restoring, not stalled [0.09ms]
+(fail) RP3: reported, then not: finished, no inference; a later backlog stalls from the finish [0.06ms]
+(fail) RP3: finished, then the first commit: ok [0.05ms]
+(fail) RP3: never reported (Kafka 4.1): Spec 006 inference, no percentage [0.04ms]
+(fail) RP3: a new owner starts over: its own report or Spec 006 [0.04ms]
+ 167 pass
+ 12 fail
