@@ -37,6 +37,10 @@ export interface TaskRow {
   unowned: boolean
   /** It has an owner but made no progress past the stall threshold (Spec 004). */
   stalledMs: number | null
+  /** Its new owner is rebuilding its state (Spec 006, inferred). */
+  restoringMs: number | null
+  /** Changelog records a new owner replays at most; null unknown, undefined without a store (Spec 006). */
+  changelog: number | null | undefined
 }
 
 /** CV3: one row per task of a subtopology. */
@@ -54,15 +58,21 @@ export function taskRows(g: GroupView, subtopologyId: string): TaskRow[] {
         move: revoking && waiting ? `${revoking.processId}→${waiting.processId}` : null,
         unowned: owners.length === 0,
         stalledMs: g.stalledTasks[task] ?? null,
+        restoringMs: g.restoringTasks[task] ?? null,
+        changelog: g.changelog[task],
       }
     })
 }
 
 export interface ProcessCard {
   processId: string
-  status: 'alive' | 'stalled'
+  status: 'alive' | 'restoring' | 'stalled'
   /** The longest time without progress among its threads; null when it is not stalled. */
   stalledMs: number | null
+  /** The longest restore among its threads; null when none restores. */
+  restoringMs: number | null
+  /** Changelog total of its active stateful tasks: null if any is unknown, undefined if it has none (RS5). */
+  changelog: number | null | undefined
   threads: { memberId: string; memberEpoch: number; tasks: { task: TaskId; role: 'active' | 'standby' }[] }[]
 }
 
@@ -71,19 +81,23 @@ const byTask = (a: TaskId, b: TaskId) => {
   const [sb, pb] = b.split('_').map(Number)
   return sa - sb || pa - pb
 }
-const STATUS_RANK = { alive: 0, stalled: 1 }
+const STATUS_RANK = { alive: 0, restoring: 1, stalled: 2 }
 
-/** CV4: one card per process, alive first, then stalled; each by label. */
+/** CV4 / RS5: one card per process: stalled if a thread is, else restoring if one is; alive, restoring, stalled; each by label. */
 export function processCards(g: GroupView): ProcessCard[] {
   const byProcess = new Map<string, GroupView['members']>()
   for (const m of g.members) byProcess.set(m.processId, [...(byProcess.get(m.processId) ?? []), m])
   return [...byProcess]
     .map(([processId, ms]): ProcessCard => {
       const stalls = ms.map((m) => m.stalledMs).filter((x): x is number => x !== null)
+      const restores = ms.map((m) => m.restoringMs).filter((x): x is number => x !== null)
+      const sizes = ms.flatMap((m) => m.assignment.active).filter((t) => t in g.changelog).map((t) => g.changelog[t])
       return {
         processId,
-        status: stalls.length ? 'stalled' : 'alive',
+        status: stalls.length ? 'stalled' : restores.length ? 'restoring' : 'alive',
         stalledMs: stalls.length ? Math.max(...stalls) : null,
+        restoringMs: restores.length ? Math.max(...restores) : null,
+        changelog: !sizes.length ? undefined : sizes.includes(null) ? null : sizes.reduce((a, b) => a! + b!, 0),
         threads: ms.map((m) => ({
           memberId: m.memberId,
           memberEpoch: m.memberEpoch,

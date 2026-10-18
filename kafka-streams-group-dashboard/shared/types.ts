@@ -39,8 +39,11 @@ export interface MemberView {
   clientId: string
   memberEpoch: number
   state: MemberState
-  /** stalled = owns an active task that made no progress past the stall threshold (Spec 004 Behavior 4). */
-  status: 'alive' | 'stalled'
+  /**
+   * stalled = owns an active task that made no progress past the stall threshold (Spec 004 Behavior 4);
+   * restoring = otherwise owns a task its new owner is rebuilding from the changelog (Spec 006, inferred).
+   */
+  status: 'alive' | 'stalled' | 'restoring'
   /** Tasks the member currently owns (as known by the coordinator). */
   assignment: Assignment
   /** Tasks the member was asked to give up but has not acknowledged yet. */
@@ -49,6 +52,8 @@ export interface MemberView {
   target: Assignment
   /** Longest time without progress among its stalled active tasks; null when not stalled. */
   stalledMs: number | null
+  /** Longest restore among its restoring active tasks; null when none restores. */
+  restoringMs: number | null
 }
 
 /** A process the broker fenced after it stopped making progress; shown for 60 s (Spec 004 RO11). */
@@ -109,6 +114,10 @@ export interface GroupView {
   stalledTasks: Record<TaskId, number>
   stallThresholdMs: number
   fenced: FencedProcess[]
+  /** Restoring tasks: ms their input has waited for the new owner's first commit (Spec 006). */
+  restoringTasks: Record<TaskId, number>
+  /** Changelog records each stateful task replays at most; null when unknown (Spec 006). */
+  changelog: Record<TaskId, number | null>
 }
 
 export interface Snapshot {

@@ -30,6 +30,7 @@ interface GroupState {
   group: InspectorGroup
   progress?: GroupProgress
   stalledTasks: Record<string, number>
+  restoringTasks: Record<string, number>
   thresholdMs: number
   fenced: FencedProcess[]
   events: LogEvent[]
@@ -72,7 +73,7 @@ export class RealBackend {
       groups: [...this.groups.values()].map((s) =>
         toGroupView(
           s.group,
-          { stalledTasks: s.stalledTasks, thresholdMs: s.thresholdMs, fenced: s.fenced },
+          { stalledTasks: s.stalledTasks, restoringTasks: s.restoringTasks, thresholdMs: s.thresholdMs, fenced: s.fenced },
           s.events,
           s.flow ?? null,
         ),
@@ -126,19 +127,25 @@ export class RealBackend {
 
     for (const g of groups) {
       const prev = this.groups.get(g.groupId)
-      const state: GroupState = prev ?? { group: g, stalledTasks: {}, thresholdMs: stallThreshold([]), fenced: [], events: [] }
+      const state: GroupState = prev ?? { group: g, stalledTasks: {}, restoringTasks: {}, thresholdMs: stallThreshold([]), fenced: [], events: [] }
 
       for (const e of diffEvents(prev?.group, g)) this.log(g.groupId, e.kind, e.message, state)
 
-      // RO11: members that disappeared were fenced if they were stalled on the previous poll, else they left
+      // RO11 / RS4: members that disappeared were fenced if they were stalled on the previous poll, else they
+      // were gone while restoring, else they left
       if (prev) {
         const before = prev.group.members.map((m) => {
           const stalled = m.assignment.active.map((t) => prev.stalledTasks[t]).filter((ms) => ms !== undefined)
-          return { memberId: m.memberId, processId: processLabel(g.groupId, m), stalledMs: stalled.length ? Math.max(...stalled) : null }
+          return {
+            memberId: m.memberId,
+            processId: processLabel(g.groupId, m),
+            stalledMs: stalled.length ? Math.max(...stalled) : null,
+            restoring: m.assignment.active.some((t) => prev.restoringTasks[t] !== undefined),
+          }
         })
         for (const gone of goneProcesses(before, new Set(g.members.map((m) => m.memberId)))) {
-          if (gone.kind === 'left') {
-            this.log(g.groupId, 'member', `${gone.processId} left`, state)
+          if (gone.kind !== 'fenced') {
+            this.log(g.groupId, 'member', `${gone.processId} ${gone.kind === 'left' ? 'left' : 'gone while restoring'}`, state)
             continue
           }
           const tasks = prev.group.members
@@ -150,10 +157,23 @@ export class RealBackend {
       }
       state.fenced = state.fenced.filter((f) => now - f.fencedAt < FENCED_TTL_MS)
 
-      const step = stepProgress(state.progress, now, taskSamples(g))
+      const samples = taskSamples(g)
+      const step = stepProgress(state.progress, now, samples)
       state.progress = step.next
       state.stalledTasks = step.stalledMs
+      state.restoringTasks = step.restoringMs
       state.thresholdMs = step.thresholdMs
+      // RS4: restore start and end, by the task's owner
+      const ownerOf = (task: string) => {
+        const m = g.members.find((x) => x.assignment.active.includes(task))
+        return m ? processLabel(g.groupId, m) : '?'
+      }
+      for (const task of step.restoreStarted) {
+        const size = samples.find((x) => x.task === task)?.changelog ?? 0
+        this.log(g.groupId, 'member', `${task} restoring on ${ownerOf(task)} (changelog ≤ ${size.toLocaleString('en-US')})`, state)
+      }
+      for (const [task, ms] of Object.entries(step.restoredMs))
+        this.log(g.groupId, 'member', `${task} restored on ${ownerOf(task)} after ${Math.round(ms / 1000)} s`, state)
 
       const previous = this.lastOffsets?.byGroup.get(g.groupId) ?? null
       state.flow = computeFlow(g, previous, this.lastOffsets ? now - this.lastOffsets.at : 0)

@@ -65,3 +65,6 @@ that alters behavior.
 | Process card | `[data-testid=process-<label>]` (stalled: amber border) | `processCards` | CV4, RO4 |
 | Fenced card | `[data-testid=fenced-<label>]` (60 s) | `fencedCards` | RO11 |
 | Broker label | `[data-testid=broker]` | — | — |
+| Changelog size (drawer, stateful subtopology) | `[data-testid=changelog-size]` | `taskRows().changelog` from `startOffsets` / `endOffsets` | RS2, RS5, RS6 |
+| Restoring mark (matrix row) | `[data-testid=restoring-mark]` (↻, warm-up colour) | `restoringTasks` | RS3, RS5 |
+| Process changelog total | `[data-testid=process-changelog]` | `processCards().changelog` | RS5 |

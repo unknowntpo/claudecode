@@ -105,8 +105,8 @@ describe('mapping', () => {
       committedOffsets: { 'text-lines': { '0': 9 }, 'word-count-counts-store-repartition': { '0': 5, '1': 6 } },
     })
     expect(taskSamples(g)).toEqual([
-      { task: '1_0', committed: 5, end: 5, owner: null },
-      { task: '1_1', committed: 6, end: 7, owner: null },
+      { task: '1_0', committed: 5, end: 5, owner: null, changelog: null },
+      { task: '1_1', committed: 6, end: 7, owner: null, changelog: null },
       { task: '0_0', committed: 9, end: 10, owner: 'm-1' },
       { task: '0_1', committed: null, end: 20, owner: null },
     ])
@@ -148,5 +148,39 @@ describe('events', () => {
     const events = diffEvents(prev, next)
     expect(events.map((e) => e.kind).join(',')).toBe(row.expectedKinds)
     if (row.expectedMessageContains) expect(events.map((e) => e.message).join('\n')).toContain(row.expectedMessageContains)
+  })
+})
+
+describe('changelog size (Spec 006)', () => {
+  const CL = 'word-count-counts-store-changelog'
+  const sizes = (g: InspectorGroup) => Object.fromEntries(taskSamples(g).map((x) => [x.task, x.changelog]))
+
+  test('RS2: size is latest − earliest of the task partition, summed over the changelog topics; no changelog → absent', () => {
+    const g = group({
+      endOffsets: { [CL]: { '0': 1166, '1': 0 } },
+      startOffsets: { [CL]: { '0': 100, '1': 0 } },
+    })
+    expect(sizes(g)).toEqual({ '1_0': 1066, '1_1': 0, '0_0': undefined, '0_1': undefined })
+    const two = group({
+      subtopologies: [{ ...group().subtopologies[0], stateChangelogTopics: [CL, 'word-count-other-changelog'] }],
+      endOffsets: { [CL]: { '0': 10, '1': 0 }, 'word-count-other-changelog': { '0': 5, '1': 3 } },
+      startOffsets: { [CL]: { '0': 0, '1': 0 }, 'word-count-other-changelog': { '0': 1, '1': 0 } },
+    })
+    expect(sizes(two)).toEqual({ '1_0': 14, '1_1': 3 })
+  })
+
+  test('RS6: earliest offsets missing → size null, never 0', () => {
+    expect(sizes(group({ endOffsets: { [CL]: { '0': 1166, '1': 0 } } }))['1_0']).toBeNull()
+    expect(sizes(group({ endOffsets: { [CL]: { '0': 1166 } }, startOffsets: { [CL]: { '0': 0, '1': 0 } } }))['1_1']).toBeNull()
+  })
+
+  test('RS2: the view carries each stateful task size and the restoring tasks', () => {
+    const g = group({ endOffsets: { [CL]: { '0': 1166, '1': 0 } }, startOffsets: { [CL]: { '0': 0, '1': 0 } } })
+    const m = member({ assignment: parse('1_0|'), targetAssignment: parse('1_0|') })
+    const v = toGroupView({ ...g, members: [m] }, { ...quiet, restoringTasks: { '1_0': 3000 } }, [])
+    expect(v.changelog).toEqual({ '1_0': 1166, '1_1': 0 })
+    expect(v.restoringTasks).toEqual({ '1_0': 3000 })
+    expect([v.members[0].status, v.members[0].restoringMs]).toEqual(['restoring', 3000])
+    expect(toGroupView({ ...g, members: [m] }, quiet, []).members[0].status).toBe('alive') // positive control
   })
 })

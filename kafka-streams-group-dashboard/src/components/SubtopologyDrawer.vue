@@ -4,12 +4,15 @@ import type { GroupView, Subtopology } from '../../shared/types'
 import { taskRows } from '../console'
 import { formatCount, formatRate } from '../format'
 import { useI18n } from '../i18n'
+import InfoTip from './InfoTip.vue'
 
 const props = defineProps<{ group: GroupView; sub: Subtopology }>()
 const emit = defineEmits<{ close: [] }>()
 const { tr } = useI18n()
 
 const rows = computed(() => taskRows(props.group, props.sub.id))
+const stateful = computed(() => props.sub.stateChangelogTopics.length > 0)
+const bound = (n: number | null | undefined) => (n == null ? '—' : n === 0 ? '0' : `≤ ${formatCount(n)}`)
 const inputs = computed(() => [...props.sub.sourceTopics, ...props.sub.repartitionSourceTopics])
 const outputs = computed(() => {
   // sink topics are unknown to the broker (Spec 004), so only repartition outputs are shown
@@ -49,13 +52,14 @@ const inputRate = computed(() => {
     <section class="sc-drawer__section">
       <div class="sc-label">{{ tr('drawer.tasks') }}</div>
       <table class="sc-tasklist">
-        <thead><tr><th>{{ tr('drawer.task') }}</th><th>{{ tr('drawer.active') }}</th><th>{{ tr('drawer.standby') }}</th></tr></thead>
+        <thead><tr><th>{{ tr('drawer.task') }}</th><th>{{ tr('drawer.active') }}</th><th>{{ tr('drawer.standby') }}</th><th v-if="stateful" class="sc-num">{{ tr('drawer.changelog') }} <InfoTip :text="tr('tip.changelog')" /></th></tr></thead>
         <tbody>
           <tr v-for="r in rows" :key="r.task">
             <td>
               {{ r.task }}
               <span v-if="r.unowned" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
               <span v-else-if="r.stalledMs !== null" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(r.stalledMs / 1000) })">!</span>
+              <span v-else-if="r.restoringMs !== null" class="restoring" :title="tr('tasks.restoring', { s: Math.round(r.restoringMs / 1000) })">↻ {{ Math.round(r.restoringMs / 1000) }} s</span>
             </td>
             <td>
               <template v-if="r.move"><span class="sc-chip sc-chip--revoking">A</span> {{ r.move }}</template>
@@ -68,6 +72,7 @@ const inputRate = computed(() => {
               <template v-if="r.standby.length"><span class="sc-chip sc-chip--standby">S</span> {{ r.standby.join(', ') }}</template>
               <template v-else>—</template>
             </td>
+            <td v-if="stateful" class="sc-num sc-mono" data-testid="changelog-size">{{ bound(r.changelog) }}</td>
           </tr>
         </tbody>
       </table>
@@ -80,5 +85,6 @@ const inputRate = computed(() => {
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .owner { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
 .stalled-mark { background: var(--state-revoking); }
+.restoring { color: var(--state-warmup); font-weight: 700; white-space: nowrap; }
 @media (max-width: 900px) { .drawer { max-width: none; flex-basis: 100%; border-left: 0; border-top: 1px solid var(--line); } }
 </style>

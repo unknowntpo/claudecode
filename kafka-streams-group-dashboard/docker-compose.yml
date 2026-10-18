@@ -64,6 +64,17 @@ services:
     <<: *streams-app
     command: ["produce"]
 
+  # Spec 006: optional, `docker compose --profile restore up seed` writes SEED_WORDS distinct words once,
+  # so word-count's counts-store is large enough for a visible restore after a rebalance
+  seed:
+    <<: *streams-app
+    command: ["seed"]
+    restart: "no"
+    profiles: ["restore"]
+    environment:
+      BOOTSTRAP: kafka:19092
+      SEED_WORDS: ${SEED_WORDS:-2000000}
+
   # scalable: no container_name, no host ports
   word-count:
     <<: *streams-app

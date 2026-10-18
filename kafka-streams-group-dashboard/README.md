@@ -26,6 +26,8 @@ bun run dev                    # 打開 http://localhost:5173
 
 `docker compose kill` 會殺掉同一個 service 的所有實例，要殺單一實例請用 `docker kill <container>`。
 
+想看 state restore：先 `docker compose --profile restore run --rm seed` 寫入 200 萬個不同的字（`SEED_WORDS` 可調），word-count 追上後再 kill 一個實例，接手的 task 會顯示 **restoring**。
+
 ## Console 看得到什麼
 
 | 區塊 | 內容 |
@@ -36,6 +38,8 @@ bun run dev                    # 打開 http://localhost:5173
 | Task 分配 / Process / 設定 / 記錄 | task × member 矩陣、process 卡片（含 60 秒內被 fence 的灰色卡片）、group config、coordinator 記錄 |
 
 **Stalled / fenced 從哪來**：broker 不回報心跳，所以 console 用 committed offset 判斷進度。input 持續進來、某 task 的 committed offset 卻超過門檻（觀察到的 commit 間隔 × 3，至少 5 秒）沒動，就是 stalled；task 換 owner 時重新計時。member 消失前是 stalled 就記為 fenced，否則是 left。Console 不說「crashed」：它分不出 crash、網路斷線或長 GC。
+
+**Changelog 與 restoring 從哪來**（Spec 006）：每個 stateful task 的 changelog 大小 = 該 partition 最新 − 最舊 offset，是新 owner 最多要重播的筆數（compaction 和本地 state 會讓實際更少）。task 換到新 owner 後、在它第一次 commit 前有 input 在等，就推論為 restoring，不算 stalled。Restore 進度和 buffer 記憶體 broker 看不到。
 
 **Broker 不知道的**：sink topic、processor 名稱和 DSL 不在 client 送給 broker 的 topology 裡，所以 pipeline 畫到最後一個 subtopology 為止。
 

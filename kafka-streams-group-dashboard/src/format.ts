@@ -15,6 +15,8 @@ export function badgeClass(state: GroupState | MemberView['state'] | MemberView[
       return 'sc-badge sc-badge--revoking'
     case 'fenced':
       return 'sc-badge sc-badge--fenced'
+    case 'restoring':
+      return 'sc-badge sc-badge--restoring'
     default:
       return 'sc-badge sc-badge--idle'
   }

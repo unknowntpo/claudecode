@@ -48,6 +48,8 @@ export interface InspectorGroup {
   /** Spec 004 Behavior 4a: per partition. */
   endOffsets?: Record<string, Record<string, number>>
   committedOffsets?: Record<string, Record<string, number>>
+  /** Spec 006: earliest offset per partition of the changelog topics. */
+  startOffsets?: Record<string, Record<string, number>>
 }
 
 export type GroupEvent = Pick<LogEvent, 'kind' | 'message'>
@@ -57,6 +59,8 @@ export interface ProgressContext {
   stalledTasks: Record<TaskId, number>
   thresholdMs: number
   fenced: FencedProcess[]
+  /** Spec 006; absent means none. */
+  restoringTasks?: Record<TaskId, number>
 }
 
 /** One sample per task: its input is partition p of the subtopology's source and repartition topics. */
@@ -74,12 +78,19 @@ export function taskSamples(g: InspectorGroup): TaskSample[] {
     const inputs = [...s.sourceTopics, ...s.repartitionSourceTopics]
     return Array.from({ length: s.partitions }, (_, p) => {
       const task = `${s.id}_${p}`
-      return {
+      const sample: TaskSample = {
         task,
         committed: sum(g.committedOffsets, inputs, p),
         end: sum(g.endOffsets, inputs, p),
         owner: g.members.find((m) => m.assignment.active.includes(task))?.memberId ?? null,
       }
+      // RS2: latest − earliest of the task's changelog partitions, an upper bound of what a new owner replays
+      if (s.stateChangelogTopics.length) {
+        const end = sum(g.endOffsets, s.stateChangelogTopics, p)
+        const start = sum(g.startOffsets, s.stateChangelogTopics, p)
+        sample.changelog = end === null || start === null ? null : end - start
+      }
+      return sample
     })
   })
 }
@@ -119,15 +130,17 @@ export function memberState(m: InspectorMember): MemberState {
 const KNOWN_STATES: GroupState[] = ['EMPTY', 'NOT_READY', 'ASSIGNING', 'RECONCILING', 'STABLE']
 
 export function toGroupView(g: InspectorGroup, ctx: ProgressContext, events: LogEvent[], flow: GroupFlow | null = null): GroupView {
+  const restoringTasks = ctx.restoringTasks ?? {}
   const members: MemberView[] = g.members.map((m) => {
     const stalled = m.assignment.active.map((t) => ctx.stalledTasks[t]).filter((ms): ms is number => ms !== undefined)
+    const restoring = m.assignment.active.map((t) => restoringTasks[t]).filter((ms): ms is number => ms !== undefined)
     return {
       memberId: m.memberId,
       processId: processLabel(g.groupId, m),
       clientId: m.clientId,
       memberEpoch: m.memberEpoch,
       state: memberState(m),
-      status: stalled.length ? 'stalled' : 'alive',
+      status: stalled.length ? 'stalled' : restoring.length ? 'restoring' : 'alive',
       assignment: toAssignment(m.assignment),
       pendingRevocation: {
         active: minus(m.assignment.active, m.targetAssignment.active),
@@ -136,6 +149,7 @@ export function toGroupView(g: InspectorGroup, ctx: ProgressContext, events: Log
       },
       target: toAssignment(m.targetAssignment),
       stalledMs: stalled.length ? Math.max(...stalled) : null,
+      restoringMs: restoring.length ? Math.max(...restoring) : null,
     }
   })
   members.sort((a, b) => a.processId.localeCompare(b.processId) || a.clientId.localeCompare(b.clientId))
@@ -170,6 +184,8 @@ export function toGroupView(g: InspectorGroup, ctx: ProgressContext, events: Log
     stalledTasks: ctx.stalledTasks,
     stallThresholdMs: ctx.thresholdMs,
     fenced: ctx.fenced,
+    restoringTasks,
+    changelog: Object.fromEntries(taskSamples(g).flatMap((x) => (x.changelog === undefined ? [] : [[x.task, x.changelog]]))),
   }
 }
 

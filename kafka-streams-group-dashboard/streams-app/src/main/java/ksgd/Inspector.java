@@ -191,7 +191,13 @@ final class Inspector {
                 // not created yet
             }
         }
-        Map<String, Map<Integer, Long>> endByPartition = endOffsets(partitions);
+        Map<String, Map<Integer, Long>> endByPartition = offsets(partitions, OffsetSpec.latest());
+        // Spec 006: earliest offsets of the changelog topics, for the changelog size of each task
+        Map<String, Integer> changelogPartitions = new LinkedHashMap<>();
+        for (List<String[]> topics : topicsByGroup.values())
+            for (String[] t : topics)
+                if (t[1].equals("changelog") && partitions.containsKey(t[0])) changelogPartitions.put(t[0], partitions.get(t[0]));
+        Map<String, Map<Integer, Long>> startByPartition = offsets(changelogPartitions, OffsetSpec.earliest());
         Map<ConfigResource, Config> configs = configsF.get();
 
         List<Object> out = new ArrayList<>();
@@ -231,6 +237,12 @@ final class Inspector {
             }
             g.put("endOffsets", groupEnd);
             g.put("committedOffsets", committedByPartition);
+            Map<String, Map<Integer, Long>> groupStart = new LinkedHashMap<>();
+            for (String[] t : topicsByGroup.get(id)) {
+                Map<Integer, Long> start = startByPartition.get(t[0]);
+                if (start != null) groupStart.put(t[0], start);
+            }
+            g.put("startOffsets", groupStart);
             out.add(g);
         }
         return out;
@@ -253,11 +265,11 @@ final class Inspector {
         return out;
     }
 
-    /** Latest offset per partition per topic, one listOffsets call for all partitions. */
-    private Map<String, Map<Integer, Long>> endOffsets(Map<String, Integer> partitions) throws Exception {
+    /** One offset (latest or earliest) per partition per topic, one listOffsets call for all partitions. */
+    private Map<String, Map<Integer, Long>> offsets(Map<String, Integer> partitions, OffsetSpec spec) throws Exception {
         Map<TopicPartition, OffsetSpec> req = new LinkedHashMap<>();
         partitions.forEach((t, n) -> {
-            for (int p = 0; p < n; p++) req.put(new TopicPartition(t, p), OffsetSpec.latest());
+            for (int p = 0; p < n; p++) req.put(new TopicPartition(t, p), spec);
         });
         Map<String, Map<Integer, Long>> out = new LinkedHashMap<>();
         if (req.isEmpty()) return out;

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { GroupView } from '../../shared/types'
 import { fencedCards, processCards } from '../console'
-import { badgeClass } from '../format'
+import { badgeClass, formatCount } from '../format'
 import { useI18n } from '../i18n'
 
 const props = defineProps<{ group: GroupView }>()
@@ -12,6 +12,8 @@ const fenced = computed(() => fencedCards(props.group))
 const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
 const memberState = (memberId: string) => props.group.members.find((m) => m.memberId === memberId)?.state ?? 'STABLE'
 const secs = (ms: number) => Math.round(ms / 1000)
+const bound = (n: number | null) => (n === null ? '—' : n === 0 ? '0' : `≤ ${formatCount(n)}`)
+const restoring = (task: string) => props.group.restoringTasks[task] !== undefined
 </script>
 
 <template>
@@ -26,7 +28,7 @@ const secs = (ms: number) => Math.round(ms / 1000)
     >
       <div class="sc-process__head">
         <span class="sc-process__name">{{ c.processId }}</span>
-        <span v-if="c.status === 'stalled'" :class="badgeClass('stalled')">{{ tr('status.stalled') }}</span>
+        <span v-if="c.status !== 'alive'" :class="badgeClass(c.status)">{{ tr(`status.${c.status}`) }}</span>
         <span v-else :class="badgeClass(memberState(c.threads[0].memberId))">{{ memberState(c.threads[0].memberId) }}</span>
       </div>
       <div v-for="th in c.threads" :key="th.memberId" class="sc-thread">
@@ -35,10 +37,12 @@ const secs = (ms: number) => Math.round(ms / 1000)
           <span class="sc-mono">epoch {{ th.memberEpoch }}</span>
         </div>
         <div class="sc-thread__tasks">
-          <span v-for="x in th.tasks" :key="x.task + x.role" class="sc-chip" :class="x.role === 'active' ? 'sc-chip--active' : 'sc-chip--standby'">{{ x.task }}</span>
+          <span v-for="x in th.tasks" :key="x.task + x.role" class="sc-chip" :class="x.role === 'active' ? (restoring(x.task) ? 'sc-chip--warmup' : 'sc-chip--active') : 'sc-chip--standby'">{{ x.role === 'active' && restoring(x.task) ? `↻ ${x.task}` : x.task }}</span>
         </div>
       </div>
       <p v-if="c.stalledMs" class="note warn">{{ tr('processes.stalled', { s: secs(c.stalledMs) }) }}</p>
+      <p v-else-if="c.restoringMs !== null" class="note restoring">{{ tr('processes.restoring', { s: secs(c.restoringMs) }) }}</p>
+      <p v-if="c.changelog !== undefined" class="note" data-testid="process-changelog">{{ tr('processes.changelog') }} <span class="sc-mono">{{ bound(c.changelog) }}</span></p>
     </article>
 
     <article v-for="f in fenced" :key="`fenced-${f.processId}`" class="sc-process fenced" :data-testid="`fenced-${f.processId}`">
@@ -62,6 +66,7 @@ const secs = (ms: number) => Math.round(ms / 1000)
 .empty { margin: 0; color: var(--ink-muted); }
 .note { margin: 0; font-size: 12px; line-height: 16px; color: var(--ink-muted); }
 .note.warn { color: var(--state-revoking); }
+.note.restoring { color: var(--state-warmup); }
 .sc-process.stalled { border-color: var(--state-revoking); }
 .sc-process.fenced { background: var(--surface-sunken); border-style: dashed; color: var(--ink-muted); }
 .moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; }

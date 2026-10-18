@@ -79,6 +79,15 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     expect(Object.keys(g.endOffsets['text-lines']).sort()).toEqual([...PARTITION_IDS].sort())
   }, TIMEOUT)
 
+  test('RS1: inspector returns earliest offsets for every changelog partition, each ≤ the latest', async () => {
+    const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=${GROUP}`)).json()).groups
+    const changelog = 'word-count-counts-store-changelog'
+    expect(Object.keys(g.startOffsets)).toEqual([changelog])
+    expect(Object.keys(g.startOffsets[changelog]).sort()).toEqual([...PARTITION_IDS].sort())
+    for (const [p, start] of Object.entries(g.startOffsets[changelog]) as [string, number][])
+      expect(start).toBeLessThanOrEqual(g.endOffsets[changelog][p])
+  }, TIMEOUT)
+
   test('RB2: an unknown group is EMPTY', async () => {
     const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=no-such-group`)).json()).groups
     expect(g).toMatchObject({ groupId: 'no-such-group', state: 'EMPTY', members: [], subtopologies: [] })

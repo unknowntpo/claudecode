@@ -8,7 +8,7 @@ import javax.naming.directory.InitialDirContext;
 
 /**
  * Entry point, one jar for every demo service (Spec 004 Behavior 1); the first argument picks the mode:
- * {@code run <appId> [label] [threads]}, {@code produce}, {@code setup} or {@code inspect [port]}.
+ * {@code run <appId> [label] [threads]}, {@code produce}, {@code seed}, {@code setup} or {@code inspect [port]}.
  */
 public final class Main {
     static String bootstrap() {
@@ -29,6 +29,7 @@ public final class Main {
                 StreamsRunner.run(args[1], label, threads);
             }
             case "produce" -> DemoProducer.run();
+            case "seed" -> Seed.run();
             case "setup" -> Setup.run();
             case "inspect" -> Inspector.run(args.length > 1 ? Integer.parseInt(args[1]) : 8085);
             default -> usage();
@@ -77,7 +78,7 @@ public final class Main {
     }
 
     private static void usage() {
-        System.err.println("usage: streams-app run <appId> [label] [threads] | produce | setup | inspect [port]");
+        System.err.println("usage: streams-app run <appId> [label] [threads] | produce | seed | setup | inspect [port]");
         System.exit(2);
     }
 }

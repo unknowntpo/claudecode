@@ -24,6 +24,7 @@ function member(spec: string): MemberView {
     pendingRevocation: { active: list('r'), standby: [] },
     target: { active: [...list('a').filter((x: string) => !list('r').includes(x)), ...list('t')], standby: kv.ts ? list('ts') : list('s') },
     stalledMs: status === 'stalled' ? Number(kv.ms ?? 0) : null,
+    restoringMs: status === 'restoring' ? Number(kv.ms ?? 0) : null,
   }
 }
 
@@ -43,6 +44,8 @@ function view(over: Partial<GroupView> = {}): GroupView {
     stalledTasks: {},
     stallThresholdMs: 5000,
     fenced: [],
+    restoringTasks: {},
+    changelog: {},
     ...over,
   }
 }
@@ -180,3 +183,34 @@ describe('routes and drawer', () => {
   })
 })
 
+
+describe('restoring (Spec 006)', () => {
+  const g = view({
+    members: members('A/m1 restoring a=1_0,0_0 ms=3000 | B/m2 alive a=0_1'),
+    restoringTasks: { '1_0': 3000 },
+    changelog: { '1_0': 1166 },
+  })
+
+  test('RS5: drawer rows carry the changelog size and restoring ms', () => {
+    const [row] = taskRows(g, '1')
+    expect([row.task, row.changelog, row.restoringMs, row.stalledMs]).toEqual(['1_0', 1166, 3000, null])
+    const [other] = taskRows(g, '0')
+    expect([other.task, other.changelog, other.restoringMs]).toEqual(['0_0', undefined, null])
+  })
+
+  test('RS5: process cards: stalled over restoring over alive, ordered alive, restoring, stalled; changelog total of active tasks', () => {
+    const three = view({
+      members: members('C/m3 stalled a=0_2 ms=9000 | A/m1 restoring a=1_0 ms=3000 | B/m2 alive a=0_1 | C/m4 restoring a=1_1 ms=1000'),
+      stalledTasks: { '0_2': 9000 },
+      restoringTasks: { '1_0': 3000, '1_1': 1000 },
+      changelog: { '1_0': 1166, '1_1': 0 },
+    })
+    expect(processCards(three).map((c) => `${c.processId} ${c.status} ${c.restoringMs} ${c.changelog}`)).toEqual([
+      'B alive null undefined',
+      'A restoring 3000 1166',
+      'C stalled 1000 0',
+    ])
+    const unknown = view({ members: members('A/m1 alive a=1_0,1_1'), changelog: { '1_0': 5, '1_1': null } })
+    expect(processCards(unknown)[0].changelog).toBeNull()
+  })
+})

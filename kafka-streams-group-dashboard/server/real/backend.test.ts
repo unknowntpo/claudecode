@@ -137,6 +137,58 @@ describe('RealBackend failures', () => {
     h.stop()
   })
 
+  /** word-count with one stateful subtopology whose changelog holds 1,166 records at partition 0. */
+  const stateful = (members: ReturnType<typeof m>[], end: number, committed: number): InspectorGroup => ({
+    ...group,
+    subtopologies: [{ ...sub, id: '1', stateChangelogTopics: ['word-count-counts-store-changelog'], partitions: 1 }],
+    members,
+    endOffsets: { 'text-lines': { '0': end }, 'word-count-counts-store-changelog': { '0': 1166 } },
+    committedOffsets: { 'text-lines': { '0': committed } },
+    startOffsets: { 'word-count-counts-store-changelog': { '0': 0 } },
+  })
+
+  test('RS4: a moved stateful task logs restoring, then restored after its first commit', async () => {
+    const h = harness()
+    backend = h.backend
+    h.set([stateful([m('m1', 'a', ['1_0']), m('m2', 'b', [])], 10, 10)])
+    await h.poll(0)
+    h.set([stateful([m('m2', 'b', ['1_0'])], 20, 10)]) // a left, b owns 1_0, input waits
+    await h.poll(1000)
+    for (let i = 1; i <= 7; i++) {
+      h.set([stateful([m('m2', 'b', ['1_0'])], 20 + i, 10)])
+      await h.poll(1000)
+    }
+    const g = () => backend!.snapshot().groups[0]
+    expect(g().restoringTasks['1_0']).toBe(7000)
+    expect(g().members[0].status).toBe('restoring')
+    expect(g().stalledTasks).toEqual({})
+    h.set([stateful([m('m2', 'b', ['1_0'])], 30, 30)])
+    await h.poll(2000)
+    const log = g().events.map((e) => e.message)
+    expect(log).toContain('1_0 restoring on b (changelog ≤ 1,166)')
+    expect(log).toContain('1_0 restored on b after 9 s')
+    expect(g().restoringTasks).toEqual({})
+    h.stop()
+  })
+
+  test('RS4: a process gone while restoring is logged so, without a fenced card', async () => {
+    const h = harness()
+    backend = h.backend
+    h.set([stateful([m('m1', 'a', ['1_0']), m('m2', 'b', [])], 10, 10)])
+    await h.poll(0)
+    for (let i = 1; i <= 7; i++) {
+      h.set([stateful([m('m2', 'b', ['1_0']), m('m3', 'c', [])], 20 + i, 10)])
+      await h.poll(1000)
+    }
+    expect(backend.snapshot().groups[0].restoringTasks['1_0']).toBeGreaterThan(5000) // positive control
+    h.set([stateful([m('m3', 'c', ['1_0'])], 30, 10)])
+    await h.poll(1000)
+    const g = backend.snapshot().groups[0]
+    expect(g.fenced).toEqual([])
+    expect(g.events.map((e) => e.message)).toContain('b gone while restoring')
+    h.stop()
+  })
+
   test('RO8: a group the broker no longer lists disappears', async () => {
     const h = harness()
     backend = h.backend

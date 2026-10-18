@@ -40,6 +40,7 @@
 .sc-badge--revoking { color: var(--state-revoking); background: var(--state-revoking-bg); }
 .sc-badge--fenced { color: var(--state-fenced); background: var(--state-fenced-bg); }
 .sc-badge--fenced::before { content: '×'; width: auto; height: auto; background: none; font-weight: 700; }
+.sc-badge--restoring { color: var(--state-warmup); background: var(--state-warmup-bg); }
 .sc-badge--idle { color: var(--state-idle); background: var(--surface-sunken); }
 .sc-badge--idle::before { background: transparent; border: 1px solid currentColor; box-sizing: border-box; }
 

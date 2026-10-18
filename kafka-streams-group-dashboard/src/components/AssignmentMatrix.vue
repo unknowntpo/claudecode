@@ -34,6 +34,10 @@ function cell(m: MemberView, t: TaskId): Cell {
 const unowned = (t: TaskId) => !props.group.members.some((m) => m.assignment.active.includes(t))
 /** Owned but no progress past the stall threshold (Spec 004 Behavior 4). */
 const stalled = (t: TaskId) => props.group.stalledTasks[t]
+/** Its new owner rebuilds its state (Spec 006). */
+const restoring = (t: TaskId) => props.group.restoringTasks[t]
+const memberBadge = (m: MemberView) => (m.status === 'alive' ? m.state : m.status)
+const memberLabel = (m: MemberView) => (m.status === 'alive' ? m.state : tr(`status.${m.status}`))
 const subtopologyOf = (t: TaskId) => t.split('_')[0]
 const key = (m: MemberView) => `${m.processId}/${m.memberId}`
 const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
@@ -55,14 +59,15 @@ const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
           <th v-for="m in members" :key="key(m)" class="sc-member">
             <div class="sc-member__id" :title="m.memberId">{{ shortId(m.memberId) }}</div>
             <div class="sc-member__epoch">epoch {{ m.memberEpoch }}</div>
-            <span :class="badgeClass(m.status === 'stalled' ? 'stalled' : m.state)">{{ m.status === 'stalled' ? tr('status.stalled') : m.state }}</span>
+            <span :class="badgeClass(memberBadge(m))">{{ memberLabel(m) }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="(t, i) in tasks" :key="t" :class="{ 'sc-split': i > 0 && subtopologyOf(t) !== subtopologyOf(tasks[i - 1]) }">
           <th>{{ t }} <span v-if="unowned(t)" class="sc-unowned" :title="tr('tasks.unowned')">!</span>
-            <span v-else-if="stalled(t) !== undefined" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(stalled(t)! / 1000) })">!</span></th>
+            <span v-else-if="stalled(t) !== undefined" class="sc-unowned stalled-mark" :title="tr('tasks.stalled', { s: Math.round(stalled(t)! / 1000) })">!</span>
+            <span v-else-if="restoring(t) !== undefined" class="restoring-mark" :title="tr('tasks.restoring', { s: Math.round(restoring(t)! / 1000) })" data-testid="restoring-mark">↻</span></th>
           <td v-for="m in members" :key="key(m)">
             <span v-if="cell(m, t)" :class="cell(m, t)!.cls" :title="cell(m, t)!.title">{{ cell(m, t)!.label }}</span>
           </td>
@@ -74,5 +79,6 @@ const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 6)}…` : id)
 
 <style scoped>
 .stalled-mark { background: var(--state-revoking); }
+.restoring-mark { color: var(--state-warmup); font-weight: 700; }
 .empty { margin: 0; color: var(--ink-muted); }
 </style>
