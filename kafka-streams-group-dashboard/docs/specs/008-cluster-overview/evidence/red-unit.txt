@@ -1,0 +1,5 @@
+error: Cannot find module './cluster' from '/Users/unknowntpo/repo/unknowntpo/claudecode/.claude/worktrees/zealous-hamilton/kafka-streams-group-dashboard/src/console.test.ts'
+error: Cannot find module './cluster' from '/Users/unknowntpo/repo/unknowntpo/claudecode/.claude/worktrees/zealous-hamilton/kafka-streams-group-dashboard/server/real/cluster.test.ts'
+(fail) RealBackend failures > CL5: /cluster failing keeps groups updating and the last cluster view, with its own error [3.12ms]
+ 139 pass
+ 3 fail

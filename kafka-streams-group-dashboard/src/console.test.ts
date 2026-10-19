@@ -5,6 +5,7 @@ import { drawerSubtopology, fencedCards, isBehind, maxLag, processCards, sortGro
 import { testPlanRows as consoleRows } from './console.cases'
 import { testPlanRows as detailRows } from './detail.cases'
 import { DICTIONARIES, detectLang, PROTECTED_TERMS, t } from './i18n'
+import { clusterDot } from './cluster'
 import { parseRoute, routeHash } from './route'
 
 /** "A/m1 alive a=0_0,0_1 s=0_3 t=0_2 r=0_2 ms=6000" → MemberView */
@@ -124,7 +125,7 @@ describe('i18n', () => {
     expect(Object.keys(DICTIONARIES['zh-Hant']).sort()).toEqual(Object.keys(DICTIONARIES.en).sort())
     for (const dict of Object.values(DICTIONARIES))
       for (const value of Object.values(dict)) for (const term of PROTECTED_TERMS) expect(value).not.toContain(term)
-    expect(t('zh-Hant', 'nav.overview')).toBe('總覽') // positive control: zh is really used
+    expect(t('zh-Hant', 'nav.groups')).toBe('群組') // positive control: zh is really used
   })
 
   test('CV5: placeholders are filled in both languages', () => {
@@ -144,7 +145,7 @@ describe('i18n', () => {
   test('CV7: a missing zh-Hant key falls back to English, never the key', () => {
     const en = { 'only.en': 'Only English' }
     expect(t('zh-Hant', 'only.en', {}, { en, 'zh-Hant': {} })).toBe('Only English')
-    expect(t('en', 'nav.overview')).toBe('Overview')
+    expect(t('en', 'nav.cluster')).toBe('Cluster')
   })
 
   test('CV8: an unknown stored language or throwing storage falls back to the browser default', () => {
@@ -156,20 +157,23 @@ describe('i18n', () => {
 })
 
 describe('routes and drawer', () => {
-  test('CV6: hash routes', () => {
+  test('CL3: hash routes: the cluster first, streams groups under #/groups (Spec 003 CV6 moved by Spec 008)', () => {
     const ids = ['word-count']
-    expect(parseRoute('#/', ids)).toEqual({ page: 'overview' })
+    expect(parseRoute('#/', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('#/groups', ids)).toEqual({ page: 'groups' })
     expect(parseRoute('#/group/word-count', ids)).toEqual({ page: 'group', groupId: 'word-count' })
-    expect(parseRoute('#/group/nope', ids)).toEqual({ page: 'overview' })
-    expect(parseRoute('#garbage', ids)).toEqual({ page: 'overview' })
-    expect(parseRoute('', ids)).toEqual({ page: 'overview' })
+    expect(parseRoute('#/group/nope', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('#garbage', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('', ids)).toEqual({ page: 'cluster' })
   })
 
   test('CV6: routeHash and parseRoute round-trip, ids are encoded', () => {
     const ids = ['word-count', 'a b/c']
     for (const groupId of ids) expect(parseRoute(routeHash({ page: 'group', groupId }), ids)).toEqual({ page: 'group', groupId })
     expect(routeHash({ page: 'group', groupId: 'a b/c' })).toBe('#/group/a%20b%2Fc')
-    expect(routeHash({ page: 'overview' })).toBe('#/')
+    expect(routeHash({ page: 'cluster' })).toBe('#/')
+    expect(routeHash({ page: 'groups' })).toBe('#/groups')
+    expect(parseRoute(routeHash({ page: 'groups' }), ids)).toEqual({ page: 'groups' })
   })
 
   test('CV9: the drawer closes when its subtopology disappears', () => {
@@ -233,5 +237,17 @@ describe('restore progress (Spec 007)', () => {
     expect(chips.map((x) => [x.task, x.progress])).toEqual([['1_0', 0.59], ['1_1', null]])
     const withStandby = view({ ...g, members: members('A/m1 restoring a=1_0 ms=3000 | B/m2 alive s=1_0') })
     expect(processCards(withStandby).find((c) => c.processId === 'B')!.threads[0].tasks).toEqual([{ task: '1_0', role: 'standby', progress: null }])
+  })
+})
+
+describe('cluster (Spec 008)', () => {
+  const totals = (o: Partial<{ brokers: number; brokersOnline: number; offline: number; underReplicated: number }>) =>
+    ({ brokers: 3, brokersOnline: 3, topics: 1, partitions: 1, offline: 0, underReplicated: 0, ...o })
+  test('CL4: the sidebar cluster dot: offline broker or partition red, under-replicated amber, else active', () => {
+    expect(clusterDot(null)).toBe('sc-dot--idle')
+    expect(clusterDot(totals({}))).toBe('sc-dot--active')
+    expect(clusterDot(totals({ underReplicated: 4 }))).toBe('sc-dot--revoking')
+    expect(clusterDot(totals({ brokersOnline: 2, underReplicated: 4 }))).toBe('sc-dot--fenced')
+    expect(clusterDot(totals({ offline: 1 }))).toBe('sc-dot--fenced')
   })
 })

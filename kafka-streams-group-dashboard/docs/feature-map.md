@@ -53,7 +53,7 @@ that alters behavior.
 
 | Element | Selector | Data | Covered by |
 | --- | --- | --- | --- |
-| Route | URL hash `#/`, `#/group/<id>` | `parseRoute` | CV6 |
+| Route | URL hash `#/` cluster, `#/groups`, `#/group/<id>` | `parseRoute` | CV6, CL3 |
 | Sidebar group item | `[data-testid=nav-<id>]` (`aria-current="page"`) | `sortGroups`, `isBehind` | CV1, CV2 |
 | Language toggle | `[data-testid=lang-en]`, `[data-testid=lang-zh-Hant]` (`aria-pressed`) | `useI18n`, `detectLang` | CV5, CV7, CV8 |
 | Theme toggle | `[data-testid=theme-system|theme-light|theme-dark]` (`aria-pressed`), sets `<html data-theme>` | `useTheme`, `detectTheme` | CV15, CV16 |
@@ -68,3 +68,8 @@ that alters behavior.
 | Changelog size (drawer, stateful subtopology) | `[data-testid=changelog-size]` | `taskRows().changelog` from `startOffsets` / `endOffsets` | RS2, RS5, RS6 |
 | Restoring mark (matrix row) | `[data-testid=restoring-mark]` (↻, warm-up colour) | `restoringTasks` | RS3, RS5 |
 | Process changelog total | `[data-testid=process-changelog]` | `processCards().changelog` | RS5 |
+| Sidebar cluster item | `[data-testid=nav-cluster]` (dot by `clusterDot`), `[data-testid=nav-streams]` | `clusterDot` | CL4 |
+| Cluster metrics | `[data-testid=metric-brokers|metric-under-replicated|metric-offline]` | `toClusterView().totals` | CL2 |
+| Broker card | `[data-testid=broker-<id>]` (offline: dashed, grey) | `toClusterView().brokers` | CL2 |
+| Partition issues | `[data-testid=cluster-issues]` | `toClusterView().attention` | CL2 |
+| Cluster error | `[data-testid=cluster-error]` | `Snapshot.clusterError` | CL5 |

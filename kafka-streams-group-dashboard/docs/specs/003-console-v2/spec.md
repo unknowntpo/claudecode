@@ -85,7 +85,7 @@ The canvas's four artboards are the example, with this live scenario (values fro
 - CV3: drawer task rows below.
 - CV4: process card rows below.
 - CV5: every key exists in both dictionaries, and no dictionary value contains a protocol state, task id or topic name from the example apps.
-- CV6: route parsing: `#/` → overview, `#/group/word-count` → that group, unknown id or junk → overview.
+- CV6: route parsing: `#/` → overview, `#/group/word-count` → that group, unknown id or junk → overview. (Spec 008 CL3: the overview moved to `#/groups`, `#/` and junk now open the cluster page.)
 
 ### Failure and retry
 - CV7: a missing `zh-Hant` key falls back to the English text, never the key.

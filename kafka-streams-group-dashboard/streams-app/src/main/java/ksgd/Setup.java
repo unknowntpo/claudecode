@@ -40,7 +40,7 @@ final class Setup {
         try (Admin admin = Admin.create(p)) {
             for (var e : TOPICS.entrySet()) {
                 try {
-                    admin.createTopics(List.of(new NewTopic(e.getKey(), e.getValue(), (short) 1))).all().get();
+                    admin.createTopics(List.of(new NewTopic(e.getKey(), e.getValue(), (short) 3))).all().get();
                     System.out.println("created topic " + e.getKey() + " (" + e.getValue() + " partitions)");
                 } catch (ExecutionException ex) {
                     if (!(ex.getCause() instanceof TopicExistsException)) throw ex;

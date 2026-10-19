@@ -3,7 +3,8 @@
 // stops or hosts an application; the only write is the broker-side standby group config.
 
 import type { Subprocess } from 'bun'
-import type { ClientMessage, FencedProcess, GroupFlow, LogEvent, Snapshot } from '../../shared/types'
+import type { ClientMessage, ClusterView, FencedProcess, GroupFlow, LogEvent, Snapshot } from '../../shared/types'
+import { type InspectorCluster, toClusterView } from './cluster'
 import { computeFlow, withoutRates } from './flow'
 import { diffEvents, type InspectorGroup, processLabel, taskSamples, toGroupView } from './mapping'
 import { type GroupProgress, goneProcesses, stallThreshold, stepProgress } from './progress'
@@ -47,6 +48,9 @@ export class RealBackend {
   private lastOffsets: { at: number; byGroup: Map<string, Record<string, number>> } | null = null
   private error?: string = 'starting inspector…'
   private paused = false
+  /** Spec 008: the last good cluster view, and the error while /cluster fails. */
+  private cluster: ClusterView | null = null
+  private clusterError?: string
   private lastPoll = 0
   private polling = false
   private readonly inspectorUrl: string
@@ -71,6 +75,8 @@ export class RealBackend {
     return {
       error: this.error,
       paused: this.paused,
+      cluster: this.cluster,
+      clusterError: this.clusterError,
       groups: [...this.groups.values()].map((s) =>
         toGroupView(
           s.group,
@@ -100,12 +106,15 @@ export class RealBackend {
     this.polling = true
     this.lastPoll = this.now()
     try {
+      // CL5: the cluster is polled beside the groups; its failure is its own
+      const clusterPoll = this.pollCluster()
       // no ids: the inspector discovers every streams group on the broker (Spec 004 Behavior 2)
       const res = await fetch(`${this.inspectorUrl}/groups`, { signal: AbortSignal.timeout(this.pollTimeoutMs) })
       if (!res.ok) throw new Error(`inspector HTTP ${res.status}`)
       const { groups } = (await res.json()) as { groups: InspectorGroup[] }
       this.apply(groups, this.now())
       this.error = undefined
+      await clusterPoll
     } catch (err) {
       // CS7: rates are unknown until two good polls in a row
       this.lastOffsets = null
@@ -113,6 +122,17 @@ export class RealBackend {
       this.error = `cannot reach the inspector / broker (${(err as Error).message}). Is \`docker compose up -d\` running?`
     } finally {
       this.polling = false
+    }
+  }
+
+  private async pollCluster() {
+    try {
+      const res = await fetch(`${this.inspectorUrl}/cluster`, { signal: AbortSignal.timeout(this.pollTimeoutMs) })
+      if (!res.ok) throw new Error(`inspector HTTP ${res.status}`)
+      this.cluster = toClusterView((await res.json()) as InspectorCluster)
+      this.clusterError = undefined
+    } catch (err) {
+      this.clusterError = `cannot read the cluster (${(err as Error).message})`
     }
   }
 

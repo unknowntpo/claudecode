@@ -1,6 +1,6 @@
-# Streams Console (KIP-1071)
+# Kafka Console
 
-觀察 Kafka Streams 應用程式的維運 console，對應 Kafka 4.1 的 **streams rebalance protocol**（KIP-1071，`group.protocol=streams`）：broker 端的 group coordinator 負責分配 task，console 從 broker 讀出每個 streams group 的 pipeline、task 分配、資料流量與設定。
+Kafka cluster 的維運 console（Spec 008 起改名，原 Streams Console）：開啟就是 cluster 總覽（broker、rack、leader / replica 分布、磁碟、異常 partition），Streams group 在 Groups 底下。觀察 Kafka Streams 應用程式的部分，對應 Kafka 4.1 的 **streams rebalance protocol**（KIP-1071，`group.protocol=streams`）：broker 端的 group coordinator 負責分配 task，console 從 broker 讀出每個 streams group 的 pipeline、task 分配、資料流量與設定。
 
 **Console 只讀**：它連到 broker、自動發現所有 streams group，不啟動、不停止、也不 host 任何應用程式。唯一的寫入是 broker 端的 standby group config。示範用的應用程式和資料是另外的 docker compose 服務。
 
@@ -9,7 +9,7 @@
 ## 跑起來
 
 ```bash
-docker compose up -d --build   # broker + setup（topic、group config）+ producer + 三個示範 app
+docker compose up -d --build   # 3 個 broker（rack a/b/c）+ setup（topic、group config）+ producer + 三個示範 app
 bun install
 bun run build:java             # console 用的 inspector（Java，包 Admin API）
 bun run dev                    # 打開 http://localhost:5173
@@ -23,6 +23,7 @@ bun run dev                    # 打開 http://localhost:5173
 | 一個實例 2 個 StreamThread（2 個 member、同一個 process） | `WORD_COUNT_THREADS=2 docker compose up -d word-count` |
 | 模擬 crash：先變 **stalled**，session timeout 後 **fenced** | `docker kill kafka-streams-group-dashboard-word-count-2` |
 | 正常關閉：立刻 **left** | `docker stop kafka-streams-group-dashboard-word-count-2` |
+| 一個 broker 掛掉：cluster 頁 broker 卡片變 offline、partition under-replicated | `docker compose stop kafka-3`（`start` 復原） |
 
 `docker compose kill` 會殺掉同一個 service 的所有實例，要殺單一實例請用 `docker kill <container>`。
 

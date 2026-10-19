@@ -100,6 +100,21 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
     expect([interval.value, interval.source]).toEqual(['1000', 'group'])
   }, TIMEOUT)
 
+  test('CL1: GET /cluster lists three brokers with racks, the controller, text-lines with 3 replicas, and disk bytes', async () => {
+    const c = await (await fetch(`${INSPECTOR}/cluster`)).json()
+    expect(c.brokers.map((b: { id: number; rack: string }) => [b.id, b.rack])).toEqual([[1, 'rack-a'], [2, 'rack-b'], [3, 'rack-c']])
+    expect([1, 2, 3]).toContain(c.controllerId)
+    // the active controller (metadata quorum leader), not the random broker describeCluster names in KRaft
+    const again = await Promise.all([1, 2, 3, 4, 5].map(async () => (await (await fetch(`${INSPECTOR}/cluster`)).json()).controllerId))
+    expect(new Set(again)).toEqual(new Set([c.controllerId]))
+    const quorum = await Bun.$`docker exec ${PROJECT}-kafka-1-1 /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server localhost:19092 describe --status`.quiet().text()
+    expect(c.controllerId).toBe(Number(/LeaderId:\s+(\d+)/.exec(quorum)![1]))
+    const textLines = c.topics.find((t: { name: string }) => t.name === 'text-lines')
+    expect(textLines.partitions).toHaveLength(TEXT_LINES_PARTITIONS)
+    for (const p of textLines.partitions) expect(p.replicas).toHaveLength(3)
+    expect(Object.keys(c.logDirBytes).sort()).toEqual(['1', '2', '3'])
+  }, TIMEOUT)
+
   test('RB2: an unknown group is EMPTY', async () => {
     const [g] = (await (await fetch(`${INSPECTOR}/groups?ids=no-such-group`)).json()).groups
     expect(g).toMatchObject({ groupId: 'no-such-group', state: 'EMPTY', members: [], subtopologies: [] })
@@ -212,7 +227,7 @@ describe.skipIf(!process.env.E2E)('real broker + compose demo', () => {
   test('RB17: after a broker restart an empty group is EMPTY (RO7: and the others are still described)', async () => {
     await Bun.$`docker compose up -d --scale word-count=0 word-count`.cwd(cwd).quiet()
     await waitFor('word-count empty', (g) => g.members.length === 0, 30_000)
-    await compose('restart', 'kafka')
+    await compose('restart', 'kafka-1', 'kafka-2', 'kafka-3')
     let body: { groups: { groupId: string; state: string }[] } | undefined
     const start = Date.now()
     while (Date.now() - start < 90_000) {

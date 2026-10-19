@@ -13,7 +13,8 @@ import javax.naming.directory.InitialDirContext;
 public final class Main {
     static String bootstrap() {
         String b = System.getenv("BOOTSTRAP");
-        return b == null || b.isBlank() ? "localhost:9092" : b;
+        // all three demo brokers, so one of them down (Spec 008) does not cut the console off
+        return b == null || b.isBlank() ? "localhost:9092,localhost:9094,localhost:9096" : b;
     }
 
     public static void main(String[] args) throws Exception {

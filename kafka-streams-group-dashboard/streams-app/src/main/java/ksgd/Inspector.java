@@ -72,6 +72,7 @@ final class Inspector {
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/groups", inspector::handle);
+        server.createContext("/cluster", inspector::handle);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
 
@@ -91,6 +92,8 @@ final class Inspector {
                         .map(String::trim).filter(s -> !s.isEmpty()).toList();
                 if (ids.isEmpty()) ids = listStreamsGroups();
                 send(ex, 200, JSON.writeValueAsBytes(Map.of("groups", describe(ids))));
+            } else if (method.equals("GET") && path.equals("/cluster")) {
+                send(ex, 200, JSON.writeValueAsBytes(ClusterInfo.describe(admin)));
             } else if (method.equals("POST") && path.matches("/groups/[^/]+/standby")) {
                 String id = path.split("/")[2];
                 int n = Integer.parseInt(q.getOrDefault("value", ""));

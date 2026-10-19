@@ -1,0 +1,1 @@
+Before the fix (2026-10-19): five GET /cluster → controllerId 2 1 3 2 2; kafka-metadata-quorum.sh describe --status → LeaderId 1. describeCluster().controller() in KRaft is a random live broker (KIP-590 forwarding), not the active controller.

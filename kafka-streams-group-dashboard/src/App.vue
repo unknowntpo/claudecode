@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { sortGroups } from './console'
+import ClusterPage from './components/ClusterPage.vue'
 import GroupPage from './components/GroupPage.vue'
 import OverviewPage from './components/OverviewPage.vue'
 import Sidebar from './components/Sidebar.vue'
@@ -25,7 +26,7 @@ const navigate = (r: Route) => (location.hash = routeHash(r))
 
 <template>
   <div class="sc-root shell">
-    <Sidebar :groups="groups" :route="route" @navigate="navigate" />
+    <Sidebar :groups="groups" :route="route" :cluster="snapshot?.cluster ?? null" @navigate="navigate" />
     <div class="content">
       <div class="bar">
         <span class="dot" :class="{ on: connected }" :title="connected ? tr('app.connected') : tr('app.disconnected')" />
@@ -34,7 +35,8 @@ const navigate = (r: Route) => (location.hash = routeHash(r))
       <div v-if="snapshot?.error" class="banner" data-testid="error-banner" role="alert">{{ snapshot.error }}</div>
       <p v-if="!snapshot" class="loading">{{ tr('app.connecting') }}</p>
       <GroupPage v-else-if="group" :group="group" :send="send" />
-      <OverviewPage v-else :groups="groups" @navigate="navigate" />
+      <OverviewPage v-else-if="route.page === 'groups'" :groups="groups" @navigate="navigate" />
+      <ClusterPage v-else :cluster="snapshot.cluster ?? null" :error="snapshot.clusterError" />
     </div>
   </div>
 </template>

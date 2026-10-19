@@ -45,6 +45,40 @@ describe('RealBackend failures', () => {
     expect(snap.groups[0].groupEpoch).toBe(2)
   })
 
+  test('CL5: /cluster failing keeps groups updating and the last cluster view, with its own error', async () => {
+    let clusterUp = true
+    let epoch = 2
+    const clusterBody = {
+      clusterId: 'c', controllerId: 1, brokers: [{ id: 1, host: 'h', port: 9092, rack: 'rack-a' }],
+      topics: [{ name: 't', internal: false, partitions: [{ partition: 0, leader: 1, replicas: [1], isr: [1] }] }],
+      logDirBytes: { '1': 10 },
+    }
+    const inspector = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        const path = new URL(req.url).pathname
+        if (path === '/cluster') return clusterUp ? Response.json(clusterBody) : new Response('no', { status: 500 })
+        return Response.json({ groups: [{ ...group, groupEpoch: epoch }] })
+      },
+    })
+    backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    await backend.tick({ force: true })
+    expect(backend.snapshot().cluster?.totals.brokers).toBe(1) // positive control
+    expect(backend.snapshot().clusterError).toBeUndefined()
+    clusterUp = false
+    epoch = 3
+    await backend.tick({ force: true })
+    const snap = backend.snapshot()
+    expect(snap.groups[0].groupEpoch).toBe(3)
+    expect(snap.error).toBeUndefined()
+    expect(snap.cluster?.totals.brokers).toBe(1)
+    expect(snap.clusterError).toContain('cluster')
+    clusterUp = true
+    await backend.tick({ force: true })
+    expect(backend.snapshot().clusterError).toBeUndefined()
+    inspector.stop(true)
+  })
+
   test('CS7: a failed poll turns every rate into null, never 0', async () => {
     let up = true
     let offset = 100

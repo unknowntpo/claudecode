@@ -122,11 +122,49 @@ export interface GroupView {
   restoreProgress: Record<TaskId, { fraction: number; ageMs: number }>
 }
 
+export interface BrokerView {
+  id: number
+  /** Listed by describeCluster; an offline broker is known only from partition replica lists. */
+  online: boolean
+  controller: boolean
+  host: string | null
+  rack: string | null
+  /** Partitions it leads and partitions it holds a replica of. */
+  leaders: number
+  replicas: number
+  /** Bytes on disk; null when unknown (offline, or DescribeLogDirs refused). */
+  diskBytes: number | null
+}
+
+export interface PartitionIssue {
+  topic: string
+  partition: number
+  issue: 'offline' | 'under-replicated'
+  /** -1 when there is none. */
+  leader: number
+  replicas: number[]
+  /** Replicas not in the ISR. */
+  missing: number[]
+}
+
+/** Spec 008: the cluster page. */
+export interface ClusterView {
+  clusterId: string
+  brokers: BrokerView[]
+  totals: { brokers: number; brokersOnline: number; topics: number; partitions: number; underReplicated: number; offline: number }
+  /** Offline first, then by topic and partition. */
+  attention: PartitionIssue[]
+}
+
 export interface Snapshot {
   /** Set when the backend cannot reach the broker / inspector. */
   error?: string
   paused: boolean
   groups: GroupView[]
+  /** Spec 008; null until the first good /cluster poll. */
+  cluster: ClusterView | null
+  /** Set while /cluster fails; the last cluster view stays. */
+  clusterError?: string
 }
 
 /** The console is read-only (Spec 004): the only write is the broker-side standby group config. */

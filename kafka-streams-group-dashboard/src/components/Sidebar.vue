@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { GroupView } from '../../shared/types'
+import type { ClusterView, GroupView } from '../../shared/types'
+import { clusterDot } from '../cluster'
 import { hasTrouble, isBehind, maxLag } from '../console'
 import { formatCount, formatRate } from '../format'
 import { LANGS, useI18n } from '../i18n'
 import { THEMES, useTheme } from '../theme'
 import type { Route } from '../route'
 
-defineProps<{ groups: GroupView[]; route: Route }>()
+defineProps<{ groups: GroupView[]; route: Route; cluster: ClusterView | null }>()
 const emit = defineEmits<{ navigate: [route: Route] }>()
 const { lang, setLang, tr } = useI18n()
 const { theme, setTheme } = useTheme()
@@ -28,11 +29,15 @@ const langLabel = { en: 'EN', 'zh-Hant': '繁中' }
 
 <template>
   <nav class="sc-sidebar sidebar" :aria-label="tr('nav.groups')">
-    <div class="sc-sidebar__brand">Streams Console</div>
-    <button class="sc-nav-item" :aria-current="route.page === 'overview' ? 'page' : undefined" @click="emit('navigate', { page: 'overview' })">
-      <span class="sc-dot sc-dot--active" /><span>{{ tr('nav.overview') }}</span><span />
+    <div class="sc-sidebar__brand">Kafka Console</div>
+    <button class="sc-nav-item" :aria-current="route.page === 'cluster' ? 'page' : undefined" data-testid="nav-cluster" @click="emit('navigate', { page: 'cluster' })">
+      <span class="sc-dot" :class="clusterDot(cluster?.totals ?? null)" /><span>{{ tr('nav.cluster') }}</span>
+      <span class="sc-nav-item__meta">{{ cluster ? `${cluster.totals.brokersOnline}/${cluster.totals.brokers}` : '' }}</span>
     </button>
     <div class="sc-label sc-sidebar__section">{{ tr('nav.groups') }}</div>
+    <button class="sc-nav-item" :aria-current="route.page === 'groups' ? 'page' : undefined" data-testid="nav-streams" @click="emit('navigate', { page: 'groups' })">
+      <span class="sc-dot sc-dot--active" /><span>{{ tr('nav.streams') }}</span><span />
+    </button>
     <button
       v-for="g in groups"
       :key="g.groupId"

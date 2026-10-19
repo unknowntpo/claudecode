@@ -1,58 +1,93 @@
-# Spec 004 demo workload: a single-node KRaft broker with the streams rebalance protocol (KIP-1071, early
-# access in 4.1), a one-shot setup, the demo producer and the three demo Kafka Streams apps.
+# Demo workload (Specs 004, 008): a three-node KRaft cluster (each node broker + controller, racks a/b/c) with the
+# streams rebalance protocol (KIP-1071), a one-shot setup, the demo producer and the three demo Kafka Streams apps.
 #   docker compose up -d --build                 # everything, one instance per app
 #   docker compose up -d --scale word-count=2    # a second word-count instance
 #   docker compose kill <container> / stop <container>
+#   docker stop kafka-streams-group-dashboard-kafka-3-1   # a broker down: partitions under-replicated (Spec 008)
 # Each app instance's client.id is <app>-<container name>, e.g.
 # word-count-kafka-streams-group-dashboard-word-count-2 (label = the container name).
-# The console runs on the host and connects to localhost:9092; containers use kafka:19092.
+# The console runs on the host and connects to localhost:9092,9094,9096; containers use kafka-N:19092.
 
 x-streams-app: &streams-app
   build: ./streams-app
   image: ksgd-streams-app:latest
   environment:
-    BOOTSTRAP: kafka:19092
+    BOOTSTRAP: kafka-1:19092,kafka-2:19092,kafka-3:19092
   depends_on:
     setup:
       condition: service_completed_successfully
 
+x-kafka-env: &kafka-env
+  CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+  KAFKA_PROCESS_ROLES: broker,controller
+  # PLAINTEXT for the host (console, e2e), PLAINTEXT_INTERNAL for the compose network and between brokers
+  KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_INTERNAL://:19092,CONTROLLER://:9093
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+  KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+  # every partition on all three brokers, writes need two in sync: one broker down is visible but harmless
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  # enable the streams group protocol
+  KAFKA_UNSTABLE_API_VERSIONS_ENABLE: "true"
+  KAFKA_UNSTABLE_FEATURE_VERSIONS_ENABLE: "true" # streams.version=1 is finalized at format time
+  KAFKA_GROUP_COORDINATOR_REBALANCE_PROTOCOLS: classic,consumer,streams
+  # short timeouts so rebalances are easy to watch
+  KAFKA_GROUP_STREAMS_HEARTBEAT_INTERVAL_MS: 2000
+  KAFKA_GROUP_STREAMS_MIN_HEARTBEAT_INTERVAL_MS: 1000
+  KAFKA_GROUP_STREAMS_SESSION_TIMEOUT_MS: 10000
+  KAFKA_GROUP_STREAMS_MIN_SESSION_TIMEOUT_MS: 6000
+  # members report task (end) offsets every second, for restore progress (Kafka 4.4, KAFKA-20116; default 60 s)
+  KAFKA_GROUP_STREAMS_TASK_OFFSET_INTERVAL_MS: 1000
+  KAFKA_GROUP_STREAMS_MIN_TASK_OFFSET_INTERVAL_MS: 1000
+
+x-kafka: &kafka
+  image: apache/kafka:4.4.0-rc4
+  healthcheck:
+    test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:19092"]
+    interval: 5s
+    timeout: 20s
+    start_period: 10s
+    retries: 20
+
 services:
-  kafka:
-    image: apache/kafka:4.4.0-rc4
+  kafka-1:
+    <<: *kafka
+    hostname: kafka-1
     ports:
       - "9092:9092"
     environment:
+      <<: *kafka-env
       KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      # PLAINTEXT for the host (console, e2e), PLAINTEXT_INTERNAL for the compose network
-      KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_INTERNAL://:19092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:19092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      # enable the streams group protocol
-      KAFKA_UNSTABLE_API_VERSIONS_ENABLE: "true"
-      KAFKA_UNSTABLE_FEATURE_VERSIONS_ENABLE: "true" # streams.version=1 is finalized at format time
-      KAFKA_GROUP_COORDINATOR_REBALANCE_PROTOCOLS: classic,consumer,streams
-      # short timeouts so rebalances are easy to watch
-      KAFKA_GROUP_STREAMS_HEARTBEAT_INTERVAL_MS: 2000
-      KAFKA_GROUP_STREAMS_MIN_HEARTBEAT_INTERVAL_MS: 1000
-      KAFKA_GROUP_STREAMS_SESSION_TIMEOUT_MS: 10000
-      KAFKA_GROUP_STREAMS_MIN_SESSION_TIMEOUT_MS: 6000
-      # members report task (end) offsets every second, for restore progress (Kafka 4.4, KAFKA-20116; default 60 s)
-      KAFKA_GROUP_STREAMS_TASK_OFFSET_INTERVAL_MS: 1000
-      KAFKA_GROUP_STREAMS_MIN_TASK_OFFSET_INTERVAL_MS: 1000
-    healthcheck:
-      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:19092"]
-      interval: 5s
-      timeout: 20s
-      start_period: 10s
-      retries: 20
+      KAFKA_BROKER_RACK: rack-a
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka-1:19092
+
+  kafka-2:
+    <<: *kafka
+    hostname: kafka-2
+    ports:
+      - "9094:9092"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 2
+      KAFKA_BROKER_RACK: rack-b
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9094,PLAINTEXT_INTERNAL://kafka-2:19092
+
+  kafka-3:
+    <<: *kafka
+    hostname: kafka-3
+    ports:
+      - "9096:9092"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 3
+      KAFKA_BROKER_RACK: rack-c
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9096,PLAINTEXT_INTERNAL://kafka-3:19092
 
   # source topics and demo group configs, then exits 0 (idempotent)
   setup:
@@ -60,7 +95,11 @@ services:
     command: ["setup"]
     restart: "no"
     depends_on:
-      kafka:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
         condition: service_healthy
 
   producer:
@@ -75,7 +114,7 @@ services:
     restart: "no"
     profiles: ["restore"]
     environment:
-      BOOTSTRAP: kafka:19092
+      BOOTSTRAP: kafka-1:19092,kafka-2:19092,kafka-3:19092
       SEED_WORDS: ${SEED_WORDS:-2000000}
 
   # scalable: no container_name, no host ports
@@ -83,7 +122,7 @@ services:
     <<: *streams-app
     command: ["run", "word-count"]
     environment:
-      BOOTSTRAP: kafka:19092
+      BOOTSTRAP: kafka-1:19092,kafka-2:19092,kafka-3:19092
       # StreamThreads per instance; each thread is one member of the streams group
       STREAM_THREADS: ${WORD_COUNT_THREADS:-1}
 
