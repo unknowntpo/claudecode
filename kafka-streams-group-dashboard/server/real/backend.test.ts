@@ -79,6 +79,22 @@ describe('RealBackend failures', () => {
     inspector.stop(true)
   })
 
+  test('CL5: /groups failing does not hold back the cluster view of the same poll', async () => {
+    const inspector = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        if (new URL(req.url).pathname !== '/cluster') return new Response('down', { status: 500 })
+        await Bun.sleep(30) // answers after /groups has failed
+        return Response.json({ clusterId: 'c', controllerId: 1, brokers: [{ id: 1, host: 'h', port: 9092, rack: null }], topics: [], logDirBytes: null })
+      },
+    })
+    backend = new RealBackend({ bin: '/usr/bin/true', inspectorUrl: `http://127.0.0.1:${inspector.port}` })
+    await backend.tick({ force: true })
+    expect(backend.snapshot().error).toContain('inspector')
+    expect(backend.snapshot().cluster?.totals.brokers).toBe(1)
+    inspector.stop(true)
+  })
+
   test('CS7: a failed poll turns every rate into null, never 0', async () => {
     let up = true
     let offset = 100

@@ -1,6 +1,6 @@
 // Test plan rows for docs/specs/008-cluster-overview/spec.md (rendered by `bun run docs:test-plan`).
 // CL2: live brokers "<id>:<rack>", the controller, partitions "<topic>-<p> L<leader> R<replicas> I<isr>" (; separated,
-// leader -1 = none) and disk "<id>=<bytes>" ("-" = DescribeLogDirs refused) → broker cards, totals, attention list.
+// leader -1 = none; attention shows the leader as L<id>) and disk "<id>=<bytes>" ("-" = DescribeLogDirs refused) → broker cards, totals, attention list.
 // Cards: "<id>[ offline][ ctl] <rack> L<leaders> R<replicas> d<bytes|->".
 
 export interface ClusterCase {
@@ -29,4 +29,6 @@ export const testPlanRows: ClusterCase[] = [
     '1 ctl a L3 R3 d- | 2 b L0 R3 d-', 'brokers 2/2 topics 2 partitions 3 ur 3 off 0', 'a-2 ur -2 | a-10 ur -2 | b-1 ur -2'),
   row('no controller and no rack', '1:- 2:-', '-', 't-0 L2 R1,2 I1,2', '1=0 2=0',
     '1 - L0 R1 d0 | 2 - L1 R1 d0', 'brokers 2/2 topics 1 partitions 1 ur 0 off 0', ''),
+  row('brokers ordered by id whatever the order they are listed in; broker 0 counts', '2:b 0:a', '0', 't-0 L0 R0,2 I0', '0=5 2=6',
+    '0 ctl a L1 R1 d5 | 2 b L0 R1 d6', 'brokers 2/2 topics 1 partitions 1 ur 1 off 0', 't-0 ur -2'),
 ]

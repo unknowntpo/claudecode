@@ -5,7 +5,7 @@ import { drawerSubtopology, fencedCards, isBehind, maxLag, processCards, sortGro
 import { testPlanRows as consoleRows } from './console.cases'
 import { testPlanRows as detailRows } from './detail.cases'
 import { DICTIONARIES, detectLang, PROTECTED_TERMS, t } from './i18n'
-import { clusterDot } from './cluster'
+import { clusterDot, formatBytes } from './cluster'
 import { parseRoute, routeHash } from './route'
 
 /** "A/m1 alive a=0_0,0_1 s=0_3 t=0_2 r=0_2 ms=6000" → MemberView */
@@ -165,6 +165,9 @@ describe('routes and drawer', () => {
     expect(parseRoute('#/group/nope', ids)).toEqual({ page: 'cluster' })
     expect(parseRoute('#garbage', ids)).toEqual({ page: 'cluster' })
     expect(parseRoute('', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('#/groupsX', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('#/group/word-count/x', ids)).toEqual({ page: 'cluster' })
+    expect(parseRoute('x#/group/word-count', ids)).toEqual({ page: 'cluster' })
   })
 
   test('CV6: routeHash and parseRoute round-trip, ids are encoded', () => {
@@ -249,5 +252,9 @@ describe('cluster (Spec 008)', () => {
     expect(clusterDot(totals({ underReplicated: 4 }))).toBe('sc-dot--revoking')
     expect(clusterDot(totals({ brokersOnline: 2, underReplicated: 4 }))).toBe('sc-dot--fenced')
     expect(clusterDot(totals({ offline: 1 }))).toBe('sc-dot--fenced')
+  })
+
+  test('CL2: disk sizes in binary units, unknown as —', () => {
+    expect([null, 0, 900, 1000, 1024, 1536, 417524, 10 * 1024 ** 2, 3 * 1024 ** 3].map(formatBytes)).toEqual(['—', '0 B', '900 B', '1000 B', '1.0 KB', '1.5 KB', '408 KB', '10 MB', '3.0 GB'])
   })
 })

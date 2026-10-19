@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.DescribeClusterResult;
 import org.apache.kafka.clients.admin.ListTopicsOptions;
@@ -12,6 +13,7 @@ import org.apache.kafka.clients.admin.LogDirDescription;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartitionInfo;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 
 /**
  * {@code GET /cluster} (Spec 008 Behavior 2): brokers, controller, every topic's partitions with leader, replicas and
@@ -24,7 +26,15 @@ final class ClusterInfo {
         DescribeClusterResult cluster = admin.describeCluster();
         List<Node> nodes = new ArrayList<>(cluster.nodes().get());
         var names = admin.listTopics(new ListTopicsOptions().listInternal(true)).names().get();
-        Map<String, TopicDescription> topics = new TreeMap<>(admin.describeTopics(names).allTopicNames().get());
+        // per topic: one deleted between listTopics and describeTopics is skipped, not a failed /cluster
+        Map<String, TopicDescription> topics = new TreeMap<>();
+        for (var e : admin.describeTopics(names).topicNameValues().entrySet()) {
+            try {
+                topics.put(e.getKey(), e.getValue().get());
+            } catch (ExecutionException ex) {
+                if (!(ex.getCause() instanceof UnknownTopicOrPartitionException)) throw ex;
+            }
+        }
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("clusterId", cluster.clusterId().get());
@@ -74,20 +84,23 @@ final class ClusterInfo {
         }
     }
 
-    /** Bytes of all replicas per live broker; null when the cluster refuses DescribeLogDirs (needs cluster DESCRIBE). */
+    /**
+     * Bytes of all replicas per live broker, each broker on its own: one that fails (shutting down) is left out.
+     * Null when no broker answers, e.g. the cluster refuses DescribeLogDirs (needs cluster DESCRIBE).
+     */
     private static Map<String, Long> logDirBytes(Admin admin, List<Node> nodes) {
-        try {
-            Map<String, Long> out = new TreeMap<>();
-            var all = admin.describeLogDirs(nodes.stream().map(Node::id).toList()).allDescriptions().get();
-            for (var broker : all.entrySet()) {
+        Map<String, Long> out = new TreeMap<>();
+        var perBroker = admin.describeLogDirs(nodes.stream().map(Node::id).toList()).descriptions();
+        for (var broker : perBroker.entrySet()) {
+            try {
                 long sum = 0;
-                for (LogDirDescription dir : broker.getValue().values())
+                for (LogDirDescription dir : broker.getValue().get().values())
                     for (var replica : dir.replicaInfos().values()) sum += replica.size();
                 out.put(String.valueOf(broker.getKey()), sum);
+            } catch (Exception e) {
+                // this broker's size stays unknown
             }
-            return out;
-        } catch (Exception e) {
-            return null;
         }
+        return out.isEmpty() ? null : out;
     }
 }

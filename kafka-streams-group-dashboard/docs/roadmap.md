@@ -37,6 +37,9 @@ and managing cluster mirroring.
 - A first cut: one cluster screen with broker cards (leaders, replicas, disk) and a list of partitions
   that need attention (offline, under-replicated, under min ISR).
 - Demo: three brokers in compose with racks, so distribution and rack awareness are visible.
+- Clusters with dedicated KRaft controllers: the quorum leader is not a broker, so the first cut shows no
+  controller badge. A later cut lists the controller quorum (`describeMetadataQuorum` voters) separately.
+- The attention list is unbounded (110 rows with one demo broker down); real clusters need grouping by topic or broker.
 
 ### Phase 2: balance analysis
 

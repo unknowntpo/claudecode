@@ -19,3 +19,4 @@ The first check found the controller badge jumping between brokers on each poll:
 is a random live broker in KRaft (see red-controller.txt). Fixed with `describeMetadataQuorum().leaderId()`;
 CL1's E2E now checks the same controller on repeated calls and equals `kafka-metadata-quorum.sh` LeaderId.
 CL8: bun run test:e2e on the three-broker demo → 16 pass, 0 fail (2026-10-19).
+After the verifier's findings (2026-10-19): bun run test:e2e → 16 pass, 0 fail; /cluster 22 ms with leaders {1: 110} after broker restarts (no preferred leader election yet).

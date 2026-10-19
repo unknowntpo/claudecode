@@ -56,7 +56,9 @@ badge on the quorum leader; metric "Under-replicated 110"; the attention list sh
 4. **Attention list**: every offline or under-replicated partition, offline first, then by topic and partition;
    each with leader, replicas and the replicas missing from the ISR. Internal topics included.
 5. **Backend**: polls `/cluster` with each groups poll; a failed `/cluster` keeps the last cluster view and shows
-   its error on the cluster page only; groups keep working.
+   its error on the cluster page only; groups keep working, and a failed groups poll does not hold back the cluster.
+   The inspector skips a topic deleted between listing and describing it, and leaves out the disk of a broker
+   whose DescribeLogDirs fails (verifier, 2026-10-19).
 6. **Navigation and rename**: `#/` is the cluster page, `#/groups` the streams groups overview, `#/group/<id>` a
    group; anything else is the cluster page. Sidebar: brand **Kafka Console**; "Cluster" (dot red when a broker
    is offline or a partition offline, amber when partitions are under-replicated, else active), then Groups with
@@ -80,7 +82,7 @@ badge on the quorum leader; metric "Under-replicated 110"; the attention list sh
 - CL4: sidebar cluster dot: offline broker or partition → fenced, under-replicated → revoking, else active.
 
 ### Failure and retry
-- CL5: `/cluster` fails while `/groups` answers → groups update, the last cluster view stays, the cluster error is set; the next good poll clears it.
+- CL5: `/cluster` fails while `/groups` answers → groups update, the last cluster view stays, the cluster error is set; the next good poll clears it; `/groups` failing does not hold back the cluster view of the same poll.
 
 ### Budget
 - CL6: [measure] `GET /cluster` on the demo, median of 20 under 200 ms.
@@ -99,6 +101,7 @@ badge on the quorum leader; metric "Under-replicated 110"; the attention list sh
 | CL2 | an offline partition comes first | 1:a 2:b | 1 | a-0 L1 R1,2 I1; b-0 L-1 R3 I | 1=1 2=2 | 1 ctl a L1 R1 d1 \| 2 b L0 R1 d2 \| 3 offline - L0 R1 d- | brokers 2/3 topics 2 partitions 2 ur 1 off 1 | b-0 offline \| a-0 ur -2 |
 | CL2 | then by topic and numeric partition | 1:a 2:b | 1 | b-1 L1 R1,2 I1; a-10 L1 R1,2 I1; a-2 L1 R1,2 I1 | - | 1 ctl a L3 R3 d- \| 2 b L0 R3 d- | brokers 2/2 topics 2 partitions 3 ur 3 off 0 | a-2 ur -2 \| a-10 ur -2 \| b-1 ur -2 |
 | CL2 | no controller and no rack | 1:- 2:- | - | t-0 L2 R1,2 I1,2 | 1=0 2=0 | 1 - L0 R1 d0 \| 2 - L1 R1 d0 | brokers 2/2 topics 1 partitions 1 ur 0 off 0 |  |
+| CL2 | brokers ordered by id whatever the order they are listed in; broker 0 counts | 2:b 0:a | 0 | t-0 L0 R0,2 I0 | 0=5 2=6 | 0 ctl a L1 R1 d5 \| 2 b L0 R1 d6 | brokers 2/2 topics 1 partitions 1 ur 1 off 0 | t-0 ur -2 |
 <!-- test-plan:end -->
 
 ## Non-goals

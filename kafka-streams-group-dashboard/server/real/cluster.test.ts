@@ -34,4 +34,8 @@ test.each(testPlanRows)('$id: $case', (row) => {
   const t = v.totals
   expect(`brokers ${t.brokersOnline}/${t.brokers} topics ${t.topics} partitions ${t.partitions} ur ${t.underReplicated} off ${t.offline}`).toBe(row.totals)
   expect(v.attention.map((a) => `${a.topic}-${a.partition} ${a.issue === 'offline' ? 'offline' : `ur ${a.missing.map((m) => `-${m}`).join(' ')}`}`).join(' | ')).toBe(row.attention)
+  // each issue keeps its leader (Behavior 4): -1 exactly when offline
+  for (const a of v.attention) expect(a.issue === 'offline' ? a.leader === -1 : a.leader >= 0).toBe(true)
+  const leaders = cluster(row).topics.flatMap((t) => t.partitions.map((p) => [`${t.name}-${p.partition}`, p.leader]))
+  for (const a of v.attention) expect(a.leader).toBe(Object.fromEntries(leaders)[`${a.topic}-${a.partition}`])
 })

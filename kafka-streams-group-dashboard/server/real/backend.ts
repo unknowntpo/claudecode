@@ -105,22 +105,22 @@ export class RealBackend {
     if (!force && this.now() - this.lastPoll < POLL_MS) return
     this.polling = true
     this.lastPoll = this.now()
+    // CL5: the cluster is polled beside the groups; its failure is its own, and a groups failure does not cut it short
+    const clusterPoll = this.pollCluster()
     try {
-      // CL5: the cluster is polled beside the groups; its failure is its own
-      const clusterPoll = this.pollCluster()
       // no ids: the inspector discovers every streams group on the broker (Spec 004 Behavior 2)
       const res = await fetch(`${this.inspectorUrl}/groups`, { signal: AbortSignal.timeout(this.pollTimeoutMs) })
       if (!res.ok) throw new Error(`inspector HTTP ${res.status}`)
       const { groups } = (await res.json()) as { groups: InspectorGroup[] }
       this.apply(groups, this.now())
       this.error = undefined
-      await clusterPoll
     } catch (err) {
       // CS7: rates are unknown until two good polls in a row
       this.lastOffsets = null
       for (const s of this.groups.values()) if (s.flow) s.flow = withoutRates(s.flow)
       this.error = `cannot reach the inspector / broker (${(err as Error).message}). Is \`docker compose up -d\` running?`
     } finally {
+      await clusterPoll
       this.polling = false
     }
   }
