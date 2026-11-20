@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>力與美 · Procedural Walk</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#ddd;font-family:system-ui,sans-serif}
+  #wrap{display:flex;align-items:center;justify-content:center;height:100%}
+  canvas{height:100vh;max-width:100vw;aspect-ratio:9/16;display:block}
+  #ui{position:fixed;left:12px;bottom:12px;display:flex;gap:8px;align-items:center}
+  button{background:#222;color:#eee;border:1px solid #555;border-radius:6px;padding:6px 12px;font-size:14px}
+  #t{font-variant-numeric:tabular-nums;font-size:13px;opacity:.7}
+  body.capture #ui{display:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="ui"><button id="play">▶ 播放（含程式生成音效）</button><span id="t"></span></div>
+<script>
+'use strict';
+/* =====================================================================
+   一切都是程式產生：沒有 3D 模型檔、沒有貼圖、沒有音檔。
+   1) 骨架 + 步態：JS 用正向運動學 (FK) 算出每個關節位置
+   2) 身體：約 50 個「圓錐膠囊 / 橢球」用 smooth-min 融合成一個連續曲面 (SDF)
+   3) 渲染：fragment shader 做 ray marching、軟陰影、AO、濕地反射
+   4) 聲音：Web Audio API 合成腳步聲、晨間城市環境音、鳥叫、低頻氛圍
+   ===================================================================== */
+
+const DURATION = 10.0;     // 秒
+const T = 1.0;             // 一個步態週期 (左右各一步)
+const params = new URLSearchParams(location.search);
+const CAPTURE = params.has('capture');
+if (CAPTURE) document.body.classList.add('capture');
+
+// ---------------- 小型向量庫 ----------------
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const len=a=>Math.hypot(a[0],a[1],a[2]);
+const norm=a=>mul(a,1/len(a));
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const mix=(a,b,t)=>a+(b-a)*t;
+const fract=x=>x-Math.floor(x);
+const smooth=(e0,e1,x)=>{const t=Math.min(1,Math.max(0,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
+// 3x3 矩陣以「三個欄向量」表示：[right, up, back]
+const rotX=a=>{const c=Math.cos(a),s=Math.sin(a);return [[1,0,0],[0,c,s],[0,-s,c]];};
+const rotY=a=>{const c=Math.cos(a),s=Math.sin(a);return [[c,0,-s],[0,1,0],[s,0,c]];};
+const rotZ=a=>{const c=Math.cos(a),s=Math.sin(a);return [[c,s,0],[-s,c,0],[0,0,1]];};
+const mv=(M,v)=>add(add(mul(M[0],v[0]),mul(M[1],v[1])),mul(M[2],v[2]));
+const mm=(A,B)=>[mv(A,B[0]),mv(A,B[1]),mv(A,B[2])];
+
+// ---------------- 步態關鍵影格 (相位, 髖屈曲, 膝屈曲, 腳掌俯仰) ----------------
+// 相位 0 = 腳跟著地, 0~0.6 支撐期, 0.6~1 擺盪期
+const LEG_KEYS = [
+  [0.00, 0.40, 0.04, 0.24],
+  [0.10, 0.33, 0.20, 0.00],
+  [0.22, 0.19, 0.22, 0.00],
+  [0.36, 0.01, 0.10, 0.00],
+  [0.50,-0.15, 0.38,-0.32],
+  [0.60,-0.17, 0.72,-0.80],
+  [0.70, 0.02, 1.05,-0.45],
+  [0.80, 0.30, 0.95,-0.10],
+  [0.90, 0.46, 0.42, 0.14],
+];
+function periodicHermite(keys, p, col){
+  const n=keys.length;
+  const P=i=>keys[((i%n)+n)%n][0]+Math.floor(i/n)*1.0;
+  const V=i=>keys[((i%n)+n)%n][col];
+  let i=n-1; for(let k=0;k<n;k++){ if(keys[k][0]<=p) i=k; }
+  const p0=P(i), p1=P(i+1);
+  const m0=(V(i+1)-V(i-1))/(P(i+1)-P(i-1)), m1=(V(i+2)-V(i))/(P(i+2)-P(i));
+  const h=p1-p0, s=(p-p0)/h, s2=s*s, s3=s2*s;
+  return (2*s3-3*s2+1)*V(i)+(s3-2*s2+s)*h*m0+(-2*s3+3*s2)*V(i+1)+(s3-s2)*h*m1;
+}
+const leg=p=>({hip:periodicHermite(LEG_KEYS,p,1),knee:periodicHermite(LEG_KEYS,p,2),foot:periodicHermite(LEG_KEYS,p,3)});
+
+// ---------------- 骨架 (身體座標：面向 -z，右手 +x，上 +y) ----------------
+const THIGH=0.42, SHIN=0.41, UPPER=0.28, FORE=0.24;
+function skeleton(t){
+  const TAU=Math.PI*2;
+  const pL=fract(t/T), pR=fract(t/T+0.5);
+  const yaw  =-0.085*Math.cos(TAU*pL);   // 骨盆旋轉
+  const roll =-0.060*Math.sin(TAU*pL);   // 骨盆側傾 (擺盪側下沉)
+  const sway =-0.022*Math.sin(TAU*pL);   // 重心左右移
+  const Rp=mm(rotY(yaw),mm(rotZ(roll),rotX(-0.09)));
+  const Rc=mm(rotY(-0.55*yaw),mm(rotZ(-0.45*roll),rotX(0.02)));
+  const Rh=mm(rotY(-0.15*yaw),rotZ(-0.1*roll));
+  const Ry=rotY(yaw), Ryc=rotY(-0.55*yaw);
+  const P=[sway,0.97,0];
+  const C=add(P,mv(rotZ(0.35*roll),[0,0.31,0.0]));
+  const N=add(C,mv(Rc,[0,0.165,0.005]));
+  const H=add(N,mv(Rh,[0,0.125,-0.012]));
+  const legs={}, arms={};
+  for(const [side,ph,oph] of [[-1,pL,pR],[1,pR,pL]]){
+    const g=leg(ph);
+    const hip=add(P,mv(Rp,[side*0.085,-0.075,0]));
+    const d1=mv(Ry,norm([-side*0.045,-Math.cos(g.hip),-Math.sin(g.hip)]));
+    const knee=add(hip,mul(d1,THIGH));
+    const sa=g.hip-g.knee;
+    const d2=mv(Ry,norm([side*0.01,-Math.cos(sa),-Math.sin(sa)]));
+    const ankle=add(knee,mul(d2,SHIN));
+    const fp=g.foot;
+    const fwd=mv(Ry,[0,Math.sin(fp),-Math.cos(fp)]);
+    const dn =mv(Ry,[0,-Math.cos(fp),-Math.sin(fp)]);
+    const heel=add(add(ankle,mul(fwd,-0.055)),mul(dn,0.068));
+    const toe =add(add(ankle,mul(fwd, 0.155)),mul(dn,0.068));
+    legs[side]={hip,knee,ankle,fwd,dn,heel,toe,d1,d2};
+    // 手臂與對側腿同步擺動
+    const og=leg(oph);
+    const f=0.55*(og.hip-0.13);
+    const e=0.28+0.35*Math.max(f,0)+0.05*Math.max(-f,0);
+    const abd=0.19;
+    const S=add(C,mv(Rc,[side*0.180,0.118,0.012]));
+    const ua=mv(Ryc,norm([side*Math.sin(abd),-Math.cos(abd)*Math.cos(f),-Math.cos(abd)*Math.sin(f)]));
+    const elbow=add(S,mul(ua,UPPER));
+    const fa=mv(Ryc,norm([side*Math.sin(abd*0.4),-Math.cos(f+e),-Math.sin(f+e)]));
+    const wrist=add(elbow,mul(fa,FORE));
+    const ha=mv(Ryc,norm([side*0.02,-Math.cos(f+e+0.12),-Math.sin(f+e+0.12)]));
+    const hand=add(wrist,mul(ha,0.15));
+    arms[side]={S,ua,elbow,fa,wrist,ha,hand};
+  }
+  return {P,C,N,H,Rp,Rc,Rh,legs,arms};
+}
+
+// 讓「最低的接觸點」貼地且不滑動：預先積分出根節點的前進量與高度
+const DT=1/1000, NSTEP=Math.ceil((DURATION+1)/DT);
+const rootZTab=new Float32Array(NSTEP+1);
+const footsteps=[];
+function contactPts(s){return [s.legs[-1].heel,s.legs[-1].toe,s.legs[1].heel,s.legs[1].toe];}
+function lowest(pts){let k=0;for(let i=1;i<4;i++) if(pts[i][1]<pts[k][1]) k=i; return k;}
+(function integrate(){
+  let z=0, prevSide=null;
+  let s0=skeleton(0), c0=contactPts(s0);
+  for(let i=0;i<NSTEP;i++){
+    rootZTab[i]=z;
+    const s1=skeleton((i+1)*DT), c1=contactPts(s1);
+    const k=lowest(c0);
+    z-= (c1[k][2]-c0[k][2]);
+    const side=k<2?-1:1;
+    if(prevSide!==null && side!==prevSide) footsteps.push({t:i*DT, side});
+    prevSide=side; c0=c1;
+  }
+  rootZTab[NSTEP]=z;
+})();
+const rootZ=t=>{const x=Math.min(NSTEP-1,Math.max(0,t/DT)), i=Math.floor(x);return mix(rootZTab[i],rootZTab[i+1],x-i);};
+const AVG_V = rootZ(DURATION)/DURATION; // 負值 (往 -z 前進)
+
+// ---------------- 用 primitive 組出身體 ----------------
+const MAT={SKIN:0,TORSO:1,LEGGINGS:2,SHOE:3,HAIR:4};
+function buildBody(t){
+  const s=skeleton(t);
+  // 貼地：把最低點移到 y=0
+  const lowY=Math.min(...contactPts(s).map(p=>p[1]));
+  const off=[0,-lowY,rootZ(t)];
+  const W=p=>add(p,off);
+  const prims=[]; const groups=[];
+  const cone=(a,b,r1,r2,k,mat)=>prims.push({type:0,a:W(a),b:W(b),r1,r2,k,mat});
+  const ell=(c,r,frame,k,mat,type=1)=>prims.push({type,a:W(c),b:r,r1:0,r2:0,k,mat,frame});
+  const endGroup=()=>groups.push(prims.length);
+  const {P,C,N,H,Rp,Rc,Rh}=s;
+  const Cw=v=>add(C,mv(Rc,v)), Pw=v=>add(P,mv(Rp,v)), Hw=v=>add(H,mv(Rh,v));
+
+  // ---- 軀幹 / 頭 (group 0)
+  ell(Pw([0,0.0,0.0]),[0.132,0.108,0.086],0,0.05,MAT.TORSO);                    // 骨盆
+  ell(Pw([0,0.175,0.004]),[0.108,0.125,0.078],0,0.06,MAT.TORSO);                 // 腰 (細)
+  ell(Cw([0,0.025,0.0]),[0.122,0.150,0.090],1,0.05,MAT.TORSO);                   // 胸廓
+  ell(Cw([0,0.105,0.012]),[0.162,0.066,0.080],1,0.05,MAT.TORSO);                 // 上背寬度
+  for(const sd of [-1,1]){
+    cone(Cw([sd*0.128,0.080,0.040]),Cw([sd*0.050,-0.135,0.050]),0.056,0.028,0.022,MAT.TORSO); // 背闊肌 V 型
+    ell (Cw([sd*0.082,0.062,0.062]),[0.050,0.056,0.026],1,0.028,MAT.TORSO);       // 棘下肌/肩胛
+    cone(add(N,mv(Rc,[sd*0.01,-0.025,0.022])),Cw([sd*0.140,0.112,0.010]),0.042,0.030,0.06,MAT.TORSO); // 斜方肌
+    cone(Cw([sd*0.029,0.02,0.064]),Pw([sd*0.031,0.08,0.058]),0.029,0.031,0.022,MAT.TORSO);      // 豎脊肌
+    ell (Pw([sd*0.060,-0.055,0.034]),[0.064,0.078,0.058],0,0.04,MAT.TORSO);       // 臀大肌
+    ell (Cw([sd*0.060,0.0,-0.074]),[0.058,0.054,0.042],1,0.03,MAT.TORSO);         // 胸
+  }
+  prims.push({type:3,a:W(Cw([0,0.12,0.104])),b:W(Pw([0,0.05,0.099])),r1:0.016,r2:0.015,k:0.03,mat:0});
+  cone(add(N,mv(Rc,[0,-0.03,0.008])),Hw([0,-0.055,0.012]),0.052,0.042,0.04,MAT.SKIN); // 頸
+  ell(H,[0.072,0.097,0.088],2,0.03,MAT.SKIN);                                    // 頭
+  ell(Hw([0,0.012,0.008]),[0.094,0.113,0.106],2,0.008,MAT.HAIR,2);               // 鮑伯頭
+  endGroup();
+
+  // ---- 腿 (group 1,2)
+  const right=Rp[0];
+  for(const sd of [-1,1]){
+    const L=s.legs[sd];
+    const u=norm(sub(L.knee,L.hip)), b=norm(cross(u,right)), lat=mul(right,sd);
+    const u2=norm(sub(L.ankle,L.knee)), b2=norm(cross(u2,right));
+    const at=(o,dd,bb,ll)=>add(add(add(o,mul(u,dd)),mul(b,bb)),mul(lat,ll));
+    const at2=(o,dd,bb,ll)=>add(add(add(o,mul(u2,dd)),mul(b2,bb)),mul(lat,ll));
+    cone(at(L.hip,-0.02,0,0),L.knee,0.082,0.050,0.05,MAT.LEGGINGS);              // 大腿
+    cone(at(L.hip,0.10,-0.004,0.034),at(L.knee,-0.12,-0.004,0.014),0.058,0.042,0.04,MAT.LEGGINGS); // 股外側肌
+    cone(at(L.hip,0.13,0.032,0.0),at(L.knee,-0.08,0.020,0.0),0.056,0.034,0.05,MAT.LEGGINGS);       // 膕旁肌
+    cone(at(L.knee,-0.03,0,0),at(L.knee,0.03,0,0),0.047,0.045,0.03,MAT.LEGGINGS); // 膝
+    cone(L.knee,L.ankle,0.044,0.029,0.03,MAT.LEGGINGS);                          // 小腿骨
+    cone(at2(L.knee,0.06,0.034,-0.016),at2(L.knee,0.21,0.020,-0.010),0.044,0.022,0.018,MAT.LEGGINGS); // 腓腸肌內側
+    cone(at2(L.knee,0.05,0.032,0.017),at2(L.knee,0.18,0.020,0.012),0.035,0.020,0.02,MAT.LEGGINGS);   // 腓腸肌外側
+    const hc=add(add(L.ankle,mul(L.fwd,-0.035)),mul(L.dn,0.034));
+    const tc=add(add(L.ankle,mul(L.fwd, 0.135)),mul(L.dn,0.040));
+    cone(hc,tc,0.036,0.029,0.02,MAT.SHOE);                                       // 鞋
+    cone(L.ankle,add(L.ankle,mul(L.dn,0.03)),0.035,0.036,0.02,MAT.SHOE);          // 鞋口
+    endGroup();
+  }
+  // ---- 手臂 (group 3,4)
+  for(const sd of [-1,1]){
+    const A=s.arms[sd], rc=Rc[0];
+    const b=norm(cross(A.ua,rc)), b2=norm(cross(A.fa,rc)), lat=mul(rc,sd);
+    cone(add(A.S,mv(Rc,[sd*0.010,0.010,0.0])),add(add(A.S,mul(A.ua,0.13)),mul(lat,0.010)),0.056,0.036,0.028,MAT.SKIN); // 三角肌
+    cone(A.S,A.elbow,0.044,0.030,0.03,MAT.SKIN);                                 // 上臂
+    cone(add(add(A.S,mul(A.ua,0.07)),mul(b,0.013)),add(add(A.elbow,mul(A.ua,-0.06)),mul(b,0.012)),0.037,0.021,0.018,MAT.SKIN); // 三頭肌
+    cone(add(add(A.S,mul(A.ua,0.09)),mul(b,-0.012)),add(add(A.elbow,mul(A.ua,-0.05)),mul(b,-0.012)),0.029,0.020,0.02,MAT.SKIN); // 二頭肌
+    cone(A.elbow,A.wrist,0.036,0.021,0.03,MAT.SKIN);                             // 前臂
+    cone(add(add(A.elbow,mul(A.fa,0.03)),mul(lat,0.008)),add(A.elbow,mul(A.fa,0.13)),0.031,0.021,0.02,MAT.SKIN);
+    cone(A.wrist,A.hand,0.022,0.017,0.015,MAT.SKIN);                             // 手
+    endGroup();
+  }
+  return {prims,groups,frames:[Rp,Rc,Rh],P:W(P),C:W(C),H:W(H),skel:s,off};
+}
+
+// ---------------- WebGL ----------------
+const canvas=document.getElementById('c');
+const RW=+(params.get('w')||540), RH=+(params.get('h')||960);
+canvas.width=RW; canvas.height=RH;
+const gl=canvas.getContext('webgl2',{preserveDrawingBuffer:true,antialias:false});
+const MAXP=56;
+
+const VS=`#version 300 es
+in vec2 pos; void main(){gl_Position=vec4(pos,0,1);}`;
+const FS=`#version 300 es
+precision highp float;
+#define MAXP ${MAXP}
+uniform vec2 uRes; uniform float uTime;
+uniform vec3 uCamPos, uCamTgt;
+uniform vec4 uPrim[MAXP*3];
+uniform vec4 uGrp[5]; uniform int uGrpEnd[5];
+uniform vec4 uBody;
+uniform mat3 uFrame[3];
+uniform vec3 uPelvis, uChest;
+out vec4 fragColor;
+
+const vec3 SUN = normalize(vec3(-0.28,0.13,-1.0));
+const vec3 SUNC = vec3(1.0,0.60,0.33)*3.2;
+const vec3 KEY = normalize(vec3(-0.88,0.42,0.30));
+const vec3 KEYC = vec3(1.0,0.86,0.72)*2.3;
+
+float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*noise(p);p=p*2.03+1.7;a*=.5;}return s;}
+
+float smin(float a,float b,float k){float h=max(k-abs(a-b),0.)/k;return min(a,b)-h*h*k*.25;}
+float sdRoundCone(vec3 p,vec3 a,vec3 b,float r1,float r2){
+  vec3 ba=b-a; float l2=dot(ba,ba); float rr=r1-r2; float a2=l2-rr*rr; float il2=1./l2;
+  vec3 pa=p-a; float y=dot(pa,ba); float z=y-l2;
+  vec3 xv=pa*l2-ba*y; float x2=dot(xv,xv); float y2=y*y*l2; float z2=z*z*l2;
+  float k=sign(rr)*rr*rr*x2;
+  if(sign(z)*a2*z2>k) return sqrt(x2+z2)*il2-r2;
+  if(sign(y)*a2*y2<k) return sqrt(x2+y2)*il2-r1;
+  return (sqrt(x2*a2*il2)+y*rr)*il2-r1;
+}
+float sdEll(vec3 p,vec3 r){float k0=length(p/r);float k1=length(p/(r*r));return k0*(k0-1.)/k1;}
+
+float primDist(int i,vec3 p){
+  vec4 A=uPrim[i*3],B=uPrim[i*3+1],C=uPrim[i*3+2];
+  if(C.z<0.5) return sdRoundCone(p,A.xyz,B.xyz,A.w,B.w);
+  vec3 q=(p-A.xyz)*uFrame[int(C.w)];
+  if(C.z<1.5) return sdEll(q,B.xyz);
+  // 頭髮：橢球 + 髮絲起伏 + 底部切齊 (鮑伯)
+  float ang=atan(q.x,q.z);
+  float flare=smoothstep(-0.02,-0.09,q.y);
+  vec3 r=B.xyz+vec3(0.012,0.,0.010)*flare;
+  float d=sdEll(q,r);
+  d+=0.0022*sin(ang*46.+4.*sin(ang*5.+q.y*30.))*smoothstep(0.07,-0.02,q.y);
+  float cut=-0.088+0.006*sin(ang*9.)+0.012*cos(ang);
+  return max(d,-(q.y-cut));
+}
+
+float mapBody(vec3 p){
+  float sb=length(p-uBody.xyz)-uBody.w;
+  if(sb>0.12) return sb;
+  float d=1e5; int s=0;
+  for(int g=0;g<5;g++){
+    int e=uGrpEnd[g];
+    float gs=length(p-uGrp[g].xyz)-uGrp[g].w;
+    if(gs<d+0.1){ for(int i=s;i<e;i++){ vec4 C=uPrim[i*3+2];
+      if(C.z>2.5){ float h=sdRoundCone(p,uPrim[i*3].xyz,uPrim[i*3+1].xyz,uPrim[i*3].w,uPrim[i*3+1].w); float k=C.x; float q=clamp(0.5-0.5*(d+h)/k,0.,1.); d=mix(d,-h,q)+k*q*(1.-q); }
+      else d=smin(d,primDist(i,p),C.x); } }
+    s=e;
+  }
+  return d;
+}
+int bodyPrim(vec3 p){
+  float best=1e5; int bi=0;
+  for(int i=0;i<MAXP;i++){ if(i>=uGrpEnd[4]) break; if(uPrim[i*3+2].z>2.5) continue; float d=primDist(i,p); if(d<best){best=d;bi=i;} }
+  return bi;
+}
+// 路燈：x=±2.7，每 8 公尺一支
+float mapPosts(vec3 p,out float lampMat){
+  vec3 q=p; q.x=abs(q.x)-2.7; q.z=q.z-8.*floor(q.z/8.+.5);
+  float pole=length(q.xz)-0.055; pole=max(pole,q.y-4.3);
+  float base=max(length(q.xz)-0.10,q.y-0.35);
+  float arm=sdRoundCone(q,vec3(0,4.25,0),vec3(-0.55,4.42,0),0.03,0.025);
+  float head=sdEll(q-vec3(-0.62,4.38,0),vec3(0.17,0.05,0.09));
+  float d=min(min(pole,base),arm);
+  lampMat=head<d?1.:0.;
+  return max(min(d,head),-p.y);
+}
+float mapScene(vec3 p,out float id){
+  float lm; float dp=mapPosts(p,lm); float db=mapBody(p);
+  id = db<dp?0.:(lm>0.5?2.:1.);
+  return min(db,dp);
+}
+float mapS(vec3 p){float id;return mapScene(p,id);}
+
+vec3 calcNormal(vec3 p){
+  const vec2 e=vec2(1,-1)*0.0006;
+  return normalize(e.xyy*mapS(p+e.xyy)+e.yyx*mapS(p+e.yyx)+e.yxy*mapS(p+e.yxy)+e.xxx*mapS(p+e.xxx));
+}
+float softShadow(vec3 ro,vec3 rd,float k){
+  float res=1.,t=0.015;
+  for(int i=0;i<48;i++){
+    float h=mapS(ro+rd*t);
+    res=min(res,k*h/t);
+    t+=clamp(h,0.012,0.6);
+    if(res<0.002||t>14.) break;
+  }
+  return smoothstep(0.,1.,clamp(res,0.,1.));
+}
+float calcAO(vec3 p,vec3 n){
+  float o=0.,s=1.;
+  for(int i=1;i<=5;i++){float h=0.012+0.035*float(i);o+=(h-mapS(p+n*h))*s;s*=0.7;}
+  return clamp(1.-2.2*o,0.,1.);
+}
+
+vec3 skyCol(vec3 rd){
+  float y=max(rd.y,0.);
+  vec3 hor=vec3(1.05,0.56,0.33), mid=vec3(0.55,0.42,0.52), zen=vec3(0.10,0.16,0.34);
+  vec3 c=mix(hor,mid,smoothstep(0.,0.18,y)); c=mix(c,zen,smoothstep(0.12,0.7,y));
+  float s=max(dot(rd,SUN),0.);
+  c+=vec3(1.0,0.55,0.25)*pow(s,6.)*0.7+vec3(1.0,0.75,0.45)*pow(s,60.)*1.5+vec3(1.,.9,.7)*smoothstep(0.9993,0.9997,s)*12.;
+  // 雲
+  vec2 uv=rd.xz/(rd.y+0.08);
+  float cl=smoothstep(0.55,0.85,fbm(uv*vec2(0.6,1.8)+vec2(uTime*0.01,0.)));
+  c=mix(c,mix(vec3(0.95,0.55,0.45),vec3(1.2,0.8,0.55),pow(s,4.)),cl*0.55*smoothstep(0.02,0.15,y));
+  // 遠方天際線
+  float a=atan(rd.x,-rd.z);
+  float cell=floor(a*55.); float h1=0.012+0.035*pow(hash(vec2(cell,1.)),3.);
+  if(abs(a)<0.04) h1=max(h1,0.075*smoothstep(0.04,0.0,abs(a))+0.02);
+  float cell2=floor(a*24.+7.); float h2=0.005+0.02*hash(vec2(cell2,3.));
+  vec3 haze=mix(hor,vec3(0.9,0.55,0.4),0.3);
+  if(rd.y<h1) c=mix(c,haze*0.82,0.55);
+  if(rd.y<h2) c=mix(c,haze*0.62,0.7);
+  return c;
+}
+
+vec3 brdf(vec3 n,vec3 v,vec3 l,vec3 lc,vec3 alb,float rough,float spec,float wrap,float sh){
+  float ndl=dot(n,l);
+  float dif=clamp((ndl+wrap)/(1.+wrap),0.,1.);
+  vec3 sss=vec3(1.0,0.45,0.3)*wrap*smoothstep(-wrap,0.3,ndl)*(1.-smoothstep(0.,0.6,ndl))*0.5;
+  vec3 h=normalize(l+v);
+  float a=rough*rough, nh=max(dot(n,h),0.);
+  float D=a*a/(3.14159*pow(nh*nh*(a*a-1.)+1.,2.));
+  float F=spec+(1.-spec)*pow(1.-max(dot(h,v),0.),5.);
+  float sp=D*F*0.25*max(ndl,0.);
+  return lc*sh*(alb*(dif+sss*alb.r*1.5)+sp);
+}
+
+vec3 shadeBody(vec3 p,vec3 n,vec3 rd,bool cheap){
+  int pi=bodyPrim(p);
+  int mat=int(uPrim[pi*3+2].y+0.5);
+  vec3 skin=vec3(0.62,0.38,0.27);
+  vec3 alb=skin; float rough=0.34, spec=0.05, wrap=0.45, sheen=0.;
+  vec3 qc=(p-uChest)*uFrame[1];
+  vec3 qp=(p-uPelvis)*uFrame[0];
+  float bra=0., legg=0., band=0.;
+  if(mat==1){
+    // 高腰緊身褲
+    legg=smoothstep(0.077,0.073,qp.y);
+    band=smoothstep(0.024,0.028,qp.y)*legg;
+    // 運動內衣 (racerback)
+    float y=qc.y, ax=abs(qc.x);
+    float inBand=smoothstep(-0.094,-0.090,y)*smoothstep(-0.026,-0.030,y);
+    float backSide=smoothstep(-0.03,0.0,qc.z);
+    float lim=min(-0.03+pow(max(ax-0.07,0.)/0.08,2.)*0.105,0.075);
+    float side=smoothstep(lim+0.003,lim-0.003,y)*smoothstep(-0.094,-0.090,y);
+    float panelW=mix(0.055,0.016,smoothstep(-0.03,0.02,y));
+    float panel=smoothstep(panelW+0.003,panelW-0.003,ax)*smoothstep(-0.032,-0.028,y)*smoothstep(0.075,0.07,y);
+    float strapX=0.016+max(y-0.05,0.)*0.62;
+    float straps=smoothstep(0.016,0.011,abs(ax-strapX))*smoothstep(0.045,0.05,y)*smoothstep(0.21,0.2,y);
+    float racer=max(panel,straps);
+    float backBra=max(inBand,racer);
+    float sideBra=smoothstep(-0.094,-0.090,y)*smoothstep(0.075,0.07,y);
+    float frontBra=smoothstep(-0.094,-0.090,y)*smoothstep(0.10,0.095,y);
+    frontBra=max(frontBra,smoothstep(0.017,0.012,abs(ax-0.075+y*0.1))*step(0.,y)*smoothstep(0.21,0.2,y));
+    bra=mix(frontBra,max(backBra,side),backSide);
+    bra*=1.-legg;
+  }
+  if(mat==2||mat==1&&legg>0.5){ legg=max(legg,1.); }
+  if(legg>0.){
+    vec3 lc=vec3(0.16,0.105,0.075);
+    lc*=1.-0.25*band;
+    // 後腰 V 型縫線
+    if(mat==1){ float seam=smoothstep(0.004,0.0015,abs(abs(qp.x)*0.55-(qp.y+0.02)*0.6))*step(qp.y,0.024)*step(0.,qp.z)*step(-0.09,qp.y);
+      lc*=1.-0.4*smoothstep(0.003,0.001,abs(qp.y-0.026)); }
+    alb=mix(alb,lc,legg); rough=mix(rough,0.6,legg); spec=mix(spec,0.04,legg); wrap=mix(wrap,0.2,legg); sheen=legg*0.35;
+  }
+  if(bra>0.){ alb=mix(alb,vec3(0.045,0.045,0.05),bra); rough=mix(rough,0.55,bra); wrap=mix(wrap,0.15,bra); sheen=max(sheen,bra*0.25);}
+  if(mat==3){ alb=vec3(0.78,0.78,0.80); rough=0.5; wrap=0.2; spec=0.04;
+    float hc=dot(p-uPrim[pi*3].xyz,vec3(0,1,0)); }
+  if(mat==4){ // 頭髮
+    vec3 qh=(p-uPrim[pi*3].xyz)*uFrame[2];
+    float ang=atan(qh.x,qh.z);
+    float str=noise(vec2(ang*70.,qh.y*6.));
+    alb=vec3(0.035,0.020,0.014)*(0.7+0.6*str); rough=0.32; spec=0.05; wrap=0.1;
+  }
+  vec3 v=-rd;
+  float ao=cheap?1.:calcAO(p,n);
+  float shSun=cheap?1.:softShadow(p+n*0.004,SUN,10.);
+  float shKey=cheap?1.:softShadow(p+n*0.004,KEY,14.);
+  vec3 col=vec3(0);
+  col+=brdf(n,v,SUN,SUNC,alb,rough,spec,wrap,shSun);
+  col+=brdf(n,v,KEY,KEYC,alb,rough,spec,wrap,shKey);
+  // 天空/地面環境光
+  vec3 amb=mix(vec3(0.20,0.15,0.13),vec3(0.30,0.34,0.50),0.5+0.5*n.y);
+  col+=alb*amb*ao*0.42;
+  // 逆光輪廓光 (rim)
+  float fr=pow(1.-max(dot(n,v),0.),3.);
+  col+=SUNC*0.55*fr*smoothstep(-0.2,0.5,dot(n,SUN))*shSun*(mat==4?0.4:1.)*mix(vec3(1),alb*3.,0.3);
+  // 布料光澤
+  col+=sheen*fr*vec3(1.,0.8,0.65)*0.5*ao;
+  return col;
+}
+
+vec3 shadePost(vec3 p,vec3 n,vec3 rd,float id,bool cheap){
+  if(id>1.5) return vec3(4.,2.6,1.4);
+  vec3 alb=vec3(0.06,0.065,0.07);
+  float sh=cheap?1.:softShadow(p+n*0.01,SUN,8.);
+  vec3 col=brdf(n,-rd,SUN,SUNC,alb,0.35,0.06,0.,sh)+alb*mix(vec3(0.2,0.15,0.13),vec3(0.3,0.34,0.5),0.5+0.5*n.y);
+  return col;
+}
+
+vec3 fogIt(vec3 col,vec3 rd,float t){
+  vec3 fc=mix(vec3(0.95,0.58,0.42),vec3(1.1,0.65,0.38),pow(max(dot(rd,SUN),0.),4.));
+  return mix(col,fc*0.8,1.-exp(-t*0.016));
+}
+
+// 回傳: 命中距離 (若 > tmax 表示沒打到)
+float march(vec3 ro,vec3 rd,float tmax,int steps,out float id){
+  float t=0.02; id=-1.;
+  for(int i=0;i<200;i++){
+    if(i>=steps) break;
+    float d=mapScene(ro+rd*t,id);
+    if(abs(d)<0.0004*t+0.0002) return t;
+    t+=d*0.95;
+    if(t>tmax) break;
+  }
+  return 1e9;
+}
+
+vec3 render(vec3 ro,vec3 rd){
+  float tPlane= rd.y<0.? -ro.y/rd.y : 1e9;
+  float id; float t=march(ro,rd,min(tPlane,90.),180,id);
+  if(t<1e8){
+    vec3 p=ro+rd*t, n=calcNormal(p);
+    vec3 c= id<0.5? shadeBody(p,n,rd,false) : shadePost(p,n,rd,id,false);
+    return fogIt(c,rd,t);
+  }
+  if(tPlane<1e8){
+    vec3 p=ro+rd*tPlane;
+    // 混凝土步道
+    vec2 g=p.xz/vec2(1.5,1.5);
+    vec2 gf=abs(fract(g)-0.5);
+    float joint=smoothstep(0.485,0.495,max(gf.x,gf.y));
+    float var=fbm(p.xz*1.3)*0.5+0.5*hash(floor(g));
+    vec3 alb=vec3(0.30,0.28,0.27)*(0.75+0.35*var)*(1.-0.5*joint);
+    // 跑道標線
+    float lane=smoothstep(0.05,0.04,abs(abs(p.x)-1.6))*step(0.5,fract(p.z/2.4));
+    alb=mix(alb,vec3(0.75,0.72,0.66),lane);
+    float wet=smoothstep(0.48,0.62,fbm(p.xz*0.32+3.1))*0.85+0.15;
+    wet*=1.-0.6*joint;
+    vec3 n=normalize(vec3(0,1,0)+vec3(fbm(p.xz*9.)-0.5,0.,fbm(p.xz*9.+5.)-0.5)*0.035*(1.-wet));
+    float shSun=softShadow(p+vec3(0,0.002,0),SUN,10.);
+    vec3 col=alb*(1.-0.45*wet)*(SUNC*max(dot(n,SUN),0.)*shSun*1.2+vec3(0.33,0.33,0.45)*0.9);
+    // 腳下接觸陰影 (AO)
+    float ao=clamp(mapS(p+vec3(0,0.06,0))/0.06,0.,1.); col*=0.5+0.5*ao;
+    // 濕地反射
+    vec3 rr=reflect(rd,n);
+    float fres=0.03+0.97*pow(1.-max(dot(n,-rd),0.),5.);
+    float rid; float rt=march(p+n*0.003,rr,40.,90,rid);
+    vec3 rc;
+    if(rt<1e8){ vec3 rp=p+rr*rt; vec3 rn=calcNormal(rp); rc= rid<0.5? shadeBody(rp,rn,rr,true):shadePost(rp,rn,rr,rid,true); rc=fogIt(rc,rr,rt);}
+    else rc=skyCol(rr);
+    col=mix(col,rc,clamp(fres*wet*1.15+wet*0.18,0.,1.));
+    return fogIt(col,rd,tPlane);
+  }
+  return skyCol(rd);
+}
+
+vec3 aces(vec3 x){return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.,1.);}
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*uRes)/(0.5*uRes.y);
+  vec3 fw=normalize(uCamTgt-uCamPos), rt=normalize(cross(fw,vec3(0,1,0))), up=cross(rt,fw);
+  float fl=1./tan(radians(30.)*0.5);
+  vec3 rd=normalize(fw*fl+rt*uv.x+up*uv.y);
+  vec3 col=render(uCamPos,rd);
+  // 鏡頭眩光
+  vec3 sp=SUN*mat3(rt,up,fw);
+  if(sp.z>0.){ vec2 su=sp.xy/sp.z*fl; float dd=length(uv-su); col+=vec3(1.,.6,.3)*0.08/(dd*8.+0.4); }
+  col*=0.62;
+  col=aces(col);
+  col=pow(col,vec3(1.08));
+  col=pow(col,vec3(1./2.2));
+  // 調色：陰影偏青、亮部偏暖
+  col=mix(col,col*vec3(0.92,1.0,1.06),1.-smoothstep(0.,0.5,dot(col,vec3(0.33))));
+  vec2 q=gl_FragCoord.xy/uRes; col*=0.55+0.45*pow(16.*q.x*q.y*(1.-q.x)*(1.-q.y),0.18);
+  col+=(hash(gl_FragCoord.xy+uTime*60.)-0.5)*0.025;
+  fragColor=vec4(col,1);
+}`;
+
+function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));return s;}
+const prog=gl.createProgram();
+gl.attachShader(prog,compile(gl.VERTEX_SHADER,VS));gl.attachShader(prog,compile(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(prog); if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const loc=gl.getAttribLocation(prog,'pos');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+const U={};for(const n of ['uRes','uTime','uCamPos','uCamTgt','uPrim','uGrp','uGrpEnd','uBody','uFrame','uPelvis','uChest'])U[n]=gl.getUniformLocation(prog,n);
+
+function camera(t){
+  const k=smooth(0,DURATION,t);
+  const z=AVG_V*t;
+  const ang=mix(0.30,-0.20,k);          // 由右後方慢慢繞到左後方
+  const dist=mix(4.3,3.4,k);            // 慢慢推近
+  const h=mix(0.55,1.25,k);             // 低角度仰拍 -> 平視
+  const tgt=[0,mix(0.98,1.0,k),z-0.1];
+  const pos=[Math.sin(ang)*dist,h,z+Math.cos(ang)*dist];
+  return {pos,tgt};
+}
+
+function renderAt(t){
+  const B=buildBody(t);
+  const data=new Float32Array(MAXP*12);
+  const centers=[];
+  B.prims.forEach((p,i)=>{
+    data.set([...p.a, (p.type===0||p.type===3)?p.r1:0, ...p.b, (p.type===0||p.type===3)?p.r2:0, p.k, p.mat, p.type, p.frame||0],i*12);
+    if(p.type===0||p.type===3){const c=mul(add(p.a,p.b),0.5);centers.push([c,len(sub(p.a,p.b))/2+Math.max(p.r1,p.r2)]);}
+    else centers.push([p.a,Math.max(...p.b)+0.03]);
+  });
+  const grp=[];let s=0;const all=[];
+  for(const e of B.groups){
+    const cs=centers.slice(s,e); let c=[0,0,0]; cs.forEach(x=>c=add(c,x[0])); c=mul(c,1/cs.length);
+    let r=0; cs.forEach(x=>r=Math.max(r,len(sub(x[0],c))+x[1])); grp.push(...c,r+0.02); all.push([c,r]); s=e;
+  }
+  let bc=[0,0,0]; all.forEach(x=>bc=add(bc,x[0])); bc=mul(bc,1/all.length);
+  let br=0; all.forEach(x=>br=Math.max(br,len(sub(x[0],bc))+x[1]));
+  gl.viewport(0,0,RW,RH);
+  gl.uniform2f(U.uRes,RW,RH); gl.uniform1f(U.uTime,t);
+  const cam=camera(t);
+  gl.uniform3fv(U.uCamPos,cam.pos); gl.uniform3fv(U.uCamTgt,cam.tgt);
+  gl.uniform4fv(U.uPrim,data); gl.uniform4fv(U.uGrp,new Float32Array(grp));
+  gl.uniform1iv(U.uGrpEnd,new Int32Array(B.groups));
+  gl.uniform4f(U.uBody,...bc,br+0.03);
+  gl.uniformMatrix3fv(U.uFrame,false,new Float32Array(B.frames.flat(2)));
+  gl.uniform3fv(U.uPelvis,B.P); gl.uniform3fv(U.uChest,B.C);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+}
+
+// ---------------- 程式合成音效 (Web Audio) ----------------
+function rng(seed){return ()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function noiseBuffer(ctx,sec,seed){const r=rng(seed);const b=ctx.createBuffer(1,ctx.sampleRate*sec,ctx.sampleRate);const d=b.getChannelData(0);
+  let last=0;for(let i=0;i<d.length;i++){const w=r()*2-1;last=(last+0.02*w)/1.02;d[i]=w*0.5+last*3;}return b;}
+function buildAudio(ctx,t0){
+  const out=ctx.createGain(); out.gain.value=0.9; out.connect(ctx.destination);
+  const R=rng(7);
+  // 1) 晨間城市底噪 (遠方車流)
+  const amb=ctx.createBufferSource(); amb.buffer=noiseBuffer(ctx,DURATION+1,11);
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=380;
+  const ag=ctx.createGain(); ag.gain.setValueAtTime(0,t0); ag.gain.linearRampToValueAtTime(0.18,t0+1.2); ag.gain.setValueAtTime(0.18,t0+DURATION-0.8); ag.gain.linearRampToValueAtTime(0,t0+DURATION);
+  amb.connect(lp).connect(ag).connect(out); amb.start(t0);
+  // 2) 低頻氛圍：五度和弦慢慢膨脹 (力量感)
+  const pad=ctx.createGain(); pad.gain.setValueAtTime(0,t0); pad.gain.linearRampToValueAtTime(0.05,t0+6); pad.gain.linearRampToValueAtTime(0.085,t0+9.2); pad.gain.linearRampToValueAtTime(0,t0+DURATION);
+  const plp=ctx.createBiquadFilter(); plp.type='lowpass'; plp.frequency.setValueAtTime(300,t0); plp.frequency.linearRampToValueAtTime(1400,t0+DURATION);
+  pad.connect(plp).connect(out);
+  for(const [f,det] of [[55,0],[82.41,4],[110,-5],[164.8,3]]){const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=f;o.detune.value=det;o.connect(pad);o.start(t0);o.stop(t0+DURATION);}
+  // 3) 腳步：運動鞋踩在濕水泥 = 低頻悶擊 + 高頻摩擦 + 一點水聲
+  const nb=noiseBuffer(ctx,0.5,99);
+  for(const st of footsteps){ if(st.t>DURATION-0.05) break;
+    const tt=t0+st.t, pan=ctx.createStereoPanner(); pan.pan.value=st.side*0.25; pan.connect(out);
+    const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(95,tt); o.frequency.exponentialRampToValueAtTime(45,tt+0.09);
+    const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,tt); g.gain.exponentialRampToValueAtTime(0.55,tt+0.006); g.gain.exponentialRampToValueAtTime(0.0001,tt+0.16);
+    o.connect(g).connect(pan); o.start(tt); o.stop(tt+0.2);
+    const n=ctx.createBufferSource(); n.buffer=nb; const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200+R()*900; bp.Q.value=0.9;
+    const ng=ctx.createGain(); ng.gain.setValueAtTime(0.0001,tt); ng.gain.exponentialRampToValueAtTime(0.22,tt+0.01); ng.gain.exponentialRampToValueAtTime(0.0001,tt+0.11);
+    n.connect(bp).connect(ng).connect(pan); n.start(tt,R()*0.3); n.stop(tt+0.15);
+    // 腳尖離地的輕刮
+    const n2=ctx.createBufferSource(); n2.buffer=nb; const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3500;
+    const g2=ctx.createGain(); const t2=tt+0.38; g2.gain.setValueAtTime(0.0001,t2); g2.gain.exponentialRampToValueAtTime(0.06,t2+0.02); g2.gain.exponentialRampToValueAtTime(0.0001,t2+0.09);
+    n2.connect(hp).connect(g2).connect(pan); n2.start(t2,R()*0.3); n2.stop(t2+0.1);
+  }
+  // 4) 鳥叫：正弦波快速滑音
+  for(let i=0;i<9;i++){
+    const tt=t0+0.6+R()*(DURATION-1.5), base=2600+R()*1800, pan=ctx.createStereoPanner(); pan.pan.value=R()*1.6-0.8; pan.connect(out);
+    const notes=2+Math.floor(R()*3);
+    for(let j=0;j<notes;j++){const ts=tt+j*0.11;const o=ctx.createOscillator();o.type='sine';
+      o.frequency.setValueAtTime(base*(1+0.15*R()),ts);o.frequency.exponentialRampToValueAtTime(base*(1.35+0.2*R()),ts+0.05);o.frequency.exponentialRampToValueAtTime(base*0.9,ts+0.08);
+      const g=ctx.createGain();g.gain.setValueAtTime(0.0001,ts);g.gain.exponentialRampToValueAtTime(0.035,ts+0.012);g.gain.exponentialRampToValueAtTime(0.0001,ts+0.085);
+      o.connect(g).connect(pan);o.start(ts);o.stop(ts+0.1);}
+  }
+}
+async function renderAudioWav(){
+  const sr=48000, ctx=new OfflineAudioContext(2,sr*DURATION,sr);
+  buildAudio(ctx,0);
+  const buf=await ctx.startRendering();
+  const L=buf.getChannelData(0),Rr=buf.getChannelData(1),n=L.length;
+  const ab=new ArrayBuffer(44+n*4),dv=new DataView(ab);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');dv.setUint32(4,36+n*4,true);ws(8,'WAVE');ws(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,2,true);
+  dv.setUint32(24,sr,true);dv.setUint32(28,sr*4,true);dv.setUint16(32,4,true);dv.setUint16(34,16,true);ws(36,'data');dv.setUint32(40,n*4,true);
+  for(let i=0;i<n;i++){dv.setInt16(44+i*4,Math.max(-1,Math.min(1,L[i]))*32767,true);dv.setInt16(46+i*4,Math.max(-1,Math.min(1,Rr[i]))*32767,true);}
+  let s='';const u8=new Uint8Array(ab);for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));
+  return btoa(s);
+}
+
+window.renderAt=renderAt; window.renderAudioWav=renderAudioWav; window.footsteps=footsteps;
+
+if(!CAPTURE){
+  let start=performance.now(), actx=null;
+  document.getElementById('play').onclick=()=>{
+    if(actx) actx.close(); actx=new AudioContext(); buildAudio(actx,actx.currentTime+0.05); start=performance.now()+50;
+  };
+  const tl=document.getElementById('t');
+  (function loop(){const t=Math.max(0,((performance.now()-start)/1000))%DURATION;renderAt(t);tl.textContent=t.toFixed(2)+' s';requestAnimationFrame(loop);})();
+}
+</script>
+</body>
+</html>
