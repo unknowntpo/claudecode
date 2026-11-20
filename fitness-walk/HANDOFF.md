@@ -77,3 +77,44 @@
 - **已知待修**：臀部像一整塊大板、肩頭還有點像護肩、背部肌肉大多被運動內衣蓋住。
 - **待使用者決定**：配色方向（白加沙色 / 白加綠 / 膚色），以及要先修上述三點，還是直接做 10 秒背面走路影片。
 - **做影片要準備的事**：`robot.js` 已經有 `walkState(t)` 步態和兩段式液壓缸。還需要沿用第一版的「接觸點不滑步」積分來算前進量、設計鏡頭路徑、逐格渲染，再搭配 Web Audio 音效。沒有 GPU 時每格約 20 秒，10 秒 30fps 約需 1.5 到 2 小時。
+
+---
+
+## 7. 方案 C：AI 圖生影片（要求逼真時的最佳路線）
+
+起因：使用者看了 Foyege（弗曳哥）用 AI 做的「性轉馬爾福」短劇，覺得很逼真。根據報導，他早期用 Runway，現在在 LibTV 平台生成鏡頭，把每個鏡頭的情緒細節寫成很具體的提示詞，單集成本約人民幣 500 到 1,600 元。
+
+**前提**：這條路不是「純程式做的」。影片生成平台要使用者自己操作，這台雲端環境無法代為生成。Claude 能做的是寫提示詞、規劃鏡頭、挑片和後製（剪接、調色、配樂，或用 `index.html` 的程式音效）。
+
+### 流程
+1. **定裝圖**：用使用者的角色設定圖當角色參考。最好再生成一張「背面全身、走路姿態、目標場景光線」的定裝圖，之後每個鏡頭都拿它當參考圖，角色才不會在鏡頭之間走樣。
+2. **分鏡**（10 秒，背面）：
+   - 0–4 秒：低角度、正後方，全身入鏡，跟拍慢慢推近。
+   - 4–7 秒：中景，從右後方 3/4 角度帶到背部肌肉和步態。
+   - 7–10 秒：鏡頭往上升，她走向逆光，輪廓發亮。
+   - 也可以一鏡到底，平台若支援 10 秒就直接生成一段。
+3. **每個鏡頭生成 4 到 8 次再挑**。檢查重點：
+   - 手腳數量對不對
+   - 步伐有沒有滑步
+   - 髮型和服裝跟定裝圖是否一致
+   - 背部線條有沒有變形
+4. **後製**：剪接、統一調色、加入程式合成的腳步聲和環境音，最後輸出 9:16 的 MP4。
+
+### 提示詞範本（英文通常效果較好，中文平台可直接用中文）
+```
+Back view, full body tracking shot. A fit Japanese woman in her mid-20s with a short dark-brown bob
+walks away from the camera at a confident, steady pace on a wet concrete waterfront at sunrise.
+Charcoal racerback sports bra, high-waisted sand-beige leggings, white running shoes.
+Athletic build: defined shoulders and back muscles, strong legs; natural hip movement and arm swing.
+Low camera angle slowly pushing in, warm backlight rim-lighting her silhouette, soft haze,
+cinematic 35mm look, shallow depth of field, realistic skin and fabric texture.
+Mood: strength, discipline, quiet confidence.
+```
+- **力的表現**：寫進穩定的步伐、肩背線條、逆光輪廓、低角度仰拍。
+- **美的表現**：寫進自然的擺臂、髮尾隨步伐晃動、晨光。
+- **負面提示**（如果平台支援）：`extra limbs, distorted hands, sliding feet, face artifacts, warped spine, text, watermark`。
+- **分寸**：重點放在運動員氣質和光影，避免過度聚焦特定身體部位的鏡頭描述。
+
+### 待使用者決定
+- 選哪個平台：報導提到 Runway、LibTV，也可以評估其他圖生影片服務，比較角色一致性、10 秒長度支援和價格。
+- 場景要用晨光濱海步道（沿用第一版），還是改成健身房、城市街道。
