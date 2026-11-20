@@ -1,0 +1,2 @@
+{ "name": "robot-walk", "private": true, "type": "module",
+  "dependencies": { "three": "0.186.1", "esbuild": "0.28.1" } }
